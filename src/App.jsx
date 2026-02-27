@@ -18,7 +18,7 @@ import {
 import { it } from 'date-fns/locale'; 
 import { supabase } from './supabaseClient';
 
-const COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#64748b'];
+const COLORS = ['#8b5cf6', '#14b8a6', '#f59e0b', '#ef4444', '#3b82f6', '#ec4899', '#10b981', '#64748b'];
 
 // --- FORMATTERS E CORAZZA DATE ---
 const formatNumber = (num) => { if (!num || isNaN(num)) return 0; return Math.ceil(num).toLocaleString('it-IT'); };
@@ -50,12 +50,12 @@ const KPICard = ({ label, current, previous, unit = '', invert = false, type = '
   let displayDiff = type === 'time' ? formatTime(Math.abs(diff)) : type === 'seconds' ? formatSeconds(Math.abs(diff)) : formatNumber(Math.abs(diff));
 
   return (
-    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
+    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group h-full flex flex-col justify-between">
       <div className="flex justify-between items-start mb-2">
         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{label}</p>
         {Icon && <Icon size={16} className={`${colorClass} opacity-50 group-hover:opacity-100 transition-opacity`} />}
       </div>
-      <div className="flex items-baseline gap-1.5">
+      <div className="flex items-baseline gap-1.5 mt-2">
         <span className="text-3xl font-black text-slate-800 tracking-tight">{displayCurrent}</span>
         <span className="text-xs font-bold text-slate-400">{unit}</span>
       </div>
@@ -116,7 +116,6 @@ export default function App() {
   const [newActivityOpen, setNewActivityOpen] = useState(false);
   const [newActivityName, setNewActivityName] = useState('');
   
-  // Il form ora viene inizializzato sempre con una voce fissa per sicurezza
   const [tsForm, setTsForm] = useState({ 
     date: format(new Date(), 'yyyy-MM-dd'), 
     startTime: '09:00', 
@@ -157,7 +156,7 @@ export default function App() {
       ]);
 
       let types = actTypes && actTypes.length > 0 ? actTypes.map(x => x.name) : DEFAULT_ACTIVITY_TYPES;
-      types = [...new Set(types)].sort(); // Rimuove doppioni e ordina alfabeticamente
+      types = [...new Set(types)].sort(); 
 
       setData({ chat: c, form: f, ast: a, dev: d, timesheet: ts, activityTypes: types });
       setLastUpdated(new Date());
@@ -168,7 +167,6 @@ export default function App() {
     }
   };
 
-  // Funzione per aprire la modale garantendo che il menu a tendina abbia un valore selezionato REALE
   const handleOpenTsModal = () => {
     setTsForm({
       date: format(new Date(), 'yyyy-MM-dd'),
@@ -201,7 +199,6 @@ export default function App() {
       return;
     }
 
-    // Ultimo check di sicurezza: se per qualche motivo il form fosse vuoto, peschiamo la prima opzione
     const finalActivityType = tsForm.activityType || (data.activityTypes.length > 0 ? data.activityTypes[0] : 'Generico');
 
     try {
@@ -229,14 +226,13 @@ export default function App() {
     try {
         setLoading(true);
         const { error } = await supabase.from('nicola_activity_types').insert([{ name: addedName }]);
-        // Ignoriamo l'errore se la voce esiste già per evitare blocchi
         
         setNewActivityOpen(false);
         setNewActivityName('');
         
         const newTypes = [...new Set([...data.activityTypes, addedName])].sort();
         setData(prev => ({...prev, activityTypes: newTypes}));
-        setTsForm(prev => ({...prev, activityType: addedName})); // Seleziona automaticamente la nuova voce creata
+        setTsForm(prev => ({...prev, activityType: addedName})); 
     } catch (e) {
         setModalContent({type: 'error', title: 'Errore Database', message: e.message});
     } finally { setLoading(false); }
@@ -553,7 +549,7 @@ export default function App() {
     }
   }, [data, periods.curr, timeframe]);
 
-  // TIMESHEET CHART
+  // TIMESHEET CHART (NUOVA UX IBRIDA)
   const tsInsights = useMemo(() => {
     const list = data.timesheet.filter(x => safeInRange(x.date, periods.curr.start, periods.curr.end));
     const map = {};
@@ -793,7 +789,7 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
               </div>
             )}
 
-            {/* SEZIONE TIMESHEET NICOLA */}
+            {/* SEZIONE TIMESHEET NICOLA (UX MIGLIORATA!) */}
             {view === 'timesheet' && (
               <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
                 <div className="flex justify-between items-end mb-6">
@@ -807,16 +803,44 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
                   <div className="lg:col-span-1">
                     <KPICard label={`Ore Totali (${timeframe === 'year' ? 'Anno' : timeframe === 'month' ? 'Mese' : 'Sett.'})`} current={kpi.curr.tsHours} previous={kpi.prev.tsHours} unit="h" icon={Timer} colorClass="text-teal-500" />
                   </div>
+                  
+                  {/* NUOVA UX: ELENCO PROGRESS BAR + GRAFICO A CIAMBELLA */}
                   <div className="lg:col-span-2">
-                    <ChartContainer title="Distribuzione Ore per Tipologia Attività" isEmpty={tsInsights.length === 0} height={180}>
-                      <BarChart data={tsInsights} layout="vertical" margin={{ top: 10, right: 30, left: 40, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                        <XAxis type="number" axisLine={false} tickLine={false} tick={{fontSize:12, fill:'#64748b'}} />
-                        <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fontSize:11, fill:'#64748b'}} width={120} />
-                        <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.1)'}}/>
-                        <Bar dataKey="hours" fill="#14b8a6" radius={[0,4,4,0]} name="Ore Impiegate" barSize={25}/>
-                      </BarChart>
-                    </ChartContainer>
+                    <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm w-full flex flex-col md:flex-row gap-6 h-[220px]">
+                       <div className="flex-1 min-w-0">
+                           <h3 className="font-bold text-slate-800 mb-4 flex-shrink-0 text-sm uppercase tracking-wide flex items-center gap-2"><PieChartIcon size={16} className="text-teal-500"/> Distribuzione Ore</h3>
+                           {tsInsights.length === 0 ? <p className="text-xs text-slate-400">Nessun dato nel periodo</p> :
+                           <div className="overflow-y-auto h-[130px] pr-3 space-y-4">
+                             {tsInsights.map((item, i) => {
+                               const pct = kpi.curr.tsHours > 0 ? Math.round((item.hours / kpi.curr.tsHours) * 100) : 0;
+                               return (
+                                 <div key={i}>
+                                   <div className="flex justify-between items-end text-xs mb-1.5">
+                                      <span className="font-bold text-slate-700 truncate mr-2 text-sm" title={item.name}>{item.name}</span>
+                                      <span className="font-black text-teal-600 whitespace-nowrap text-sm">{item.hours}h <span className="text-slate-400 font-medium text-[10px] ml-1">({pct}%)</span></span>
+                                   </div>
+                                   <div className="w-full bg-slate-100 rounded-full h-2">
+                                      <div className="h-2 rounded-full" style={{ width: `${pct}%`, backgroundColor: COLORS[i % COLORS.length] }}></div>
+                                   </div>
+                                 </div>
+                               )
+                             })}
+                           </div>
+                           }
+                       </div>
+                       <div className="w-[180px] h-[160px] flex-shrink-0 hidden md:flex items-center justify-center">
+                          {tsInsights.length > 0 && (
+                              <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                  <Pie data={tsInsights} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={2} dataKey="hours" nameKey="name">
+                                    {tsInsights.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
+                                  </Pie>
+                                  <Tooltip contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.1)'}} />
+                                </PieChart>
+                              </ResponsiveContainer>
+                          )}
+                       </div>
+                    </div>
                   </div>
                 </div>
 
@@ -979,7 +1003,7 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
                 
                 <div className="bg-slate-900 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between shadow-lg mb-6 border border-slate-800">
                   <div className="flex items-center gap-4">
-                    <div className="bg-blue-500/20 p-3 rounded-xl"><UploadCloud size={24} className="text-blue-400"/></div>
+                    <div className="bg-blue-500/20 p-3 rounded-xl">{loading ? <RefreshCw size={24} className="text-blue-400 animate-spin"/> : <UploadCloud size={24} className="text-blue-400"/>}</div>
                     <div>
                       <h3 className="text-white font-bold text-sm md:text-base">Sincronizza Storico Chat</h3>
                       <p className="text-slate-400 text-xs mt-1">Carica il file "Cronologia" per aggiornare Volumi, Heatmap e Classifiche automaticamente.</p>
