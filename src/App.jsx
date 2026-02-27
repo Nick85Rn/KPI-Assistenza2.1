@@ -7,7 +7,7 @@ import {
 import { 
   Database, Users, AlertCircle, Code, LayoutDashboard, 
   ChevronLeft, ChevronRight, TrendingUp, TrendingDown, 
-  X, FileText, ClipboardCheck, Trophy, Target, Clock, Tag, Bug, Zap, CheckCircle2, Copy, UploadCloud, GraduationCap, Timer, AlertTriangle, XCircle, Activity, Building, CalendarDays, Plus, Trash2, PieChart as PieChartIcon
+  RefreshCw, X, FileText, ClipboardCheck, Trophy, Target, Clock, Tag, Bug, Zap, CheckCircle2, Copy, UploadCloud, GraduationCap, Timer, AlertTriangle, XCircle, Activity, Building, CalendarDays, Plus, Trash2, PieChart as PieChartIcon, Calendar
 } from 'lucide-react';
 import { 
   format, subWeeks, addWeeks, startOfWeek, endOfWeek, 
