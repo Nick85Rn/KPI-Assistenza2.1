@@ -153,7 +153,7 @@ export default function App() {
 
       const defaultTypes = ['Formazione Cliente', 'Call con Zucchetti', 'Riunione Pienissimo', 'Riunione Zucchetti'];
       let types = actTypes && actTypes.length > 0 ? actTypes.map(x => x.name) : defaultTypes;
-      types = [...new Set(types)]; // Rimuove doppioni
+      types = [...new Set(types)]; 
 
       setData({ chat: c, form: f, ast: a, dev: d, timesheet: ts, activityTypes: types });
       setTsForm(prev => ({...prev, activityType: prev.activityType || types[0]}));
@@ -176,7 +176,7 @@ export default function App() {
       const [sH, sM] = start.split(':').map(Number);
       const [eH, eM] = end.split(':').map(Number);
       let diff = (eH * 60 + eM) - (sH * 60 + sM);
-      if (diff < 0) diff += 24 * 60; // Se finisce dopo mezzanotte
+      if (diff < 0) diff += 24 * 60; 
       return +(diff / 60).toFixed(2);
     };
 
@@ -544,6 +544,9 @@ export default function App() {
     });
     return Object.values(map).sort((a,b) => b.hours - a.hours);
   }, [data.timesheet, periods.curr]);
+
+  // LISTA GLOBALE TIMESHEET CORRENTE
+  const currentTimesheetList = data.timesheet.filter(x => safeInRange(x.date, periods.curr.start, periods.curr.end));
 
   // Dati grafici comparativi per il Report Executive
   const execChartData = [
@@ -949,7 +952,7 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
               </div>
             )}
 
-            {/* SEZIONE CHAT (CON PICCHI SETTIMANALI E NUOVA LEADERBOARD) */}
+            {/* SEZIONE CHAT */}
             {view === 'chat' && (
               <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
                 <SectionTitle icon={Users} title="Analisi Operativa Reparto Chat" colorClass="text-blue-600" bgClass="bg-blue-100" />
