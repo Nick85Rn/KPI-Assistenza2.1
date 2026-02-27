@@ -7,7 +7,7 @@ import {
 import { 
   Database, Users, AlertCircle, Code, LayoutDashboard, 
   ChevronLeft, ChevronRight, TrendingUp, TrendingDown, 
-  X, FileText, ClipboardCheck, Trophy, Target, Clock, Tag, Bug, Zap, CheckCircle2, Copy, UploadCloud, GraduationCap, Timer, AlertTriangle, XCircle, Activity, Building, CalendarDays, Plus, Trash2, PieChart as PieChartIcon, Calendar
+  X, FileText, ClipboardCheck, Trophy, Target, Clock, Tag, Bug, Zap, CheckCircle2, Copy, UploadCloud, GraduationCap, Timer, AlertTriangle, XCircle, Activity, Building, CalendarDays, Plus, Trash2, PieChart as PieChartIcon
 } from 'lucide-react';
 import { 
   format, subWeeks, addWeeks, startOfWeek, endOfWeek, 
@@ -101,16 +101,24 @@ const ChartContainer = ({ title, children, isEmpty, height = 320 }) => (
 export default function App() {
   const [view, setView] = useState('dashboard');
   const [timeframe, setTimeframe] = useState('week'); 
-  const [data, setData] = useState({ chat: [], form: [], ast: [], dev: [], timesheet: [] });
+  const [data, setData] = useState({ chat: [], form: [], ast: [], dev: [], timesheet: [], activityTypes: [] });
   const [loading, setLoading] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [copied, setCopied] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [modalContent, setModalContent] = useState(null);
 
-  // STATI PER IL TIMESHEET
+  // STATI PER IL TIMESHEET E LA NUOVA ATTIVITA'
   const [tsModalOpen, setTsModalOpen] = useState(false);
-  const [tsForm, setTsForm] = useState({ date: format(new Date(), 'yyyy-MM-dd'), hours: '', notes: '' });
+  const [newActivityOpen, setNewActivityOpen] = useState(false);
+  const [newActivityName, setNewActivityName] = useState('');
+  const [tsForm, setTsForm] = useState({ 
+    date: format(new Date(), 'yyyy-MM-dd'), 
+    startTime: '09:00', 
+    endTime: '10:00', 
+    activityType: '', 
+    notes: '' 
+  });
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -134,15 +142,21 @@ export default function App() {
         } catch (e) { return []; }
       };
 
-      const [c, f, a, d, ts] = await Promise.all([
+      const [c, f, a, d, ts, actTypes] = await Promise.all([
         fetchPaginated('zoho_raw_chats'),
         fetchPaginated('zoho_raw_formazione'),
         fetchPaginated('zoho_daily_assistenza'),
         fetchPaginated('zoho_daily_sviluppo'),
-        fetchPaginated('nicola_timesheet', { col: 'date', asc: false })
+        fetchPaginated('nicola_timesheet', { col: 'date', asc: false }),
+        fetchPaginated('nicola_activity_types', { col: 'name', asc: true })
       ]);
 
-      setData({ chat: c, form: f, ast: a, dev: d, timesheet: ts });
+      const defaultTypes = ['Formazione Cliente', 'Call con Zucchetti', 'Riunione Pienissimo', 'Riunione Zucchetti'];
+      let types = actTypes && actTypes.length > 0 ? actTypes.map(x => x.name) : defaultTypes;
+      types = [...new Set(types)]; // Rimuove doppioni
+
+      setData({ chat: c, form: f, ast: a, dev: d, timesheet: ts, activityTypes: types });
+      setTsForm(prev => ({...prev, activityType: prev.activityType || types[0]}));
       setLastUpdated(new Date());
     } catch (err) { 
       setModalContent({ type: 'error', title: 'Errore Database', message: err.message });
@@ -153,22 +167,58 @@ export default function App() {
 
   const handleSaveTimesheet = async (e) => {
     e.preventDefault();
-    if (!tsForm.date || !tsForm.hours) {
-      setModalContent({ type: 'warning', title: 'Campi Obbligatori', message: 'Inserisci almeno la data e le ore impiegate.' });
+    if (!tsForm.date || !tsForm.startTime || !tsForm.endTime) {
+      setModalContent({ type: 'warning', title: 'Campi Obbligatori', message: 'Inserisci la data e gli orari di inizio e fine.' });
       return;
     }
+
+    const calcHours = (start, end) => {
+      const [sH, sM] = start.split(':').map(Number);
+      const [eH, eM] = end.split(':').map(Number);
+      let diff = (eH * 60 + eM) - (sH * 60 + sM);
+      if (diff < 0) diff += 24 * 60; // Se finisce dopo mezzanotte
+      return +(diff / 60).toFixed(2);
+    };
+
+    const hours = calcHours(tsForm.startTime, tsForm.endTime);
+    if (hours <= 0) {
+      setModalContent({ type: 'warning', title: 'Orari Errati', message: 'L\'orario di fine deve essere successivo a quello di inizio.' });
+      return;
+    }
+
     try {
       setLoading(true);
       const { error } = await supabase.from('nicola_timesheet').insert([{
-        date: tsForm.date, hours: Number(tsForm.hours), notes: tsForm.notes || ''
+        date: tsForm.date, 
+        start_time: tsForm.startTime,
+        end_time: tsForm.endTime,
+        hours: hours, 
+        activity_type: tsForm.activityType || data.activityTypes[0],
+        notes: tsForm.notes || ''
       }]);
       if (error) throw error;
       
       setTsModalOpen(false);
-      setTsForm({ date: format(new Date(), 'yyyy-MM-dd'), hours: '', notes: '' });
+      setTsForm({ date: format(new Date(), 'yyyy-MM-dd'), startTime: '09:00', endTime: '10:00', activityType: data.activityTypes[0], notes: '' });
       setModalContent({ type: 'success', title: 'Salvato', message: 'Attività salvata nel tuo Timesheet.' });
       fetchAll();
     } catch (err) { setModalContent({ type: 'error', title: 'Errore Salvataggio', message: err.message });
+    } finally { setLoading(false); }
+  };
+
+  const handleAddActivityType = async () => {
+    if (!newActivityName.trim()) return;
+    try {
+        setLoading(true);
+        const { error } = await supabase.from('nicola_activity_types').insert([{ name: newActivityName.trim() }]);
+        if (error) throw error;
+        setNewActivityOpen(false);
+        const addedName = newActivityName.trim();
+        setNewActivityName('');
+        setData(prev => ({...prev, activityTypes: [...prev.activityTypes, addedName].sort()}));
+        setTsForm(prev => ({...prev, activityType: addedName}));
+    } catch (e) {
+        setModalContent({type: 'error', title: 'Errore', message: e.message});
     } finally { setLoading(false); }
   };
 
@@ -385,7 +435,7 @@ export default function App() {
     const opsMap = {};
     const heatMap = { "09:00": 0, "10:00": 0, "11:00": 0, "12:00": 0, "13:00": 0, "14:00": 0, "15:00": 0, "16:00": 0, "17:00": 0, "18:00": 0, "19:00": 0 };
     const respMap = { '< 30 sec': 0, '30 - 45 sec': 0, '45 - 60 sec': 0, '60 - 90 sec': 0, '90 - 120 sec': 0, '> 120 sec': 0 };
-    const weekMap = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 0: 0 }; // 1=Lunedì... 0=Domenica
+    const weekMap = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 0: 0 }; 
 
     chats.forEach(c => {
        const op = c.operator || 'Non Assegnato';
@@ -403,7 +453,7 @@ export default function App() {
           const labels = { 9: "09:00", 10: "10:00", 11: "11:00", 12: "12:00", 13: "13:00", 14: "14:00", 15: "15:00", 16: "16:00", 17: "17:00", 18: "18:00", 19: "19:00" };
           if (labels[h]) heatMap[labels[h]]++;
           
-          weekMap[d.getDay()]++; // Conta per giorno della settimana
+          weekMap[d.getDay()]++; 
        }
 
        const w = Number(c.waiting_time_seconds) || 0;
@@ -483,6 +533,18 @@ export default function App() {
     }
   }, [data, periods.curr, timeframe]);
 
+  // TIMESHEET CHART
+  const tsInsights = useMemo(() => {
+    const list = data.timesheet.filter(x => safeInRange(x.date, periods.curr.start, periods.curr.end));
+    const map = {};
+    list.forEach(x => {
+        const t = x.activity_type || 'Generico';
+        if (!map[t]) map[t] = { name: t, hours: 0 };
+        map[t].hours += Number(x.hours);
+    });
+    return Object.values(map).sort((a,b) => b.hours - a.hours);
+  }, [data.timesheet, periods.curr]);
+
   // Dati grafici comparativi per il Report Executive
   const execChartData = [
     { name: 'Chat', Corrente: kpi.curr.chatVol, Precedente: kpi.prev.chatVol },
@@ -496,7 +558,7 @@ export default function App() {
       
       {/* MODALE GLOBALE MESSAGGI */}
       {modalContent && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl scale-100 animate-in zoom-in-95 duration-200">
             <div className="flex flex-col items-center text-center">
               {modalContent.type === 'success' && <CheckCircle2 size={56} className="text-emerald-500 mb-4" />}
@@ -510,9 +572,23 @@ export default function App() {
         </div>
       )}
 
+      {/* MODALE NUOVA ATTIVITA (SOPRA IL TIMESHEET) */}
+      {newActivityOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl scale-100 animate-in zoom-in-95 duration-200">
+            <h3 className="text-md font-black text-slate-800 mb-4">Nuova Categoria Attività</h3>
+            <input type="text" value={newActivityName} onChange={e => setNewActivityName(e.target.value)} placeholder="Es. Supporto Marketing" className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" autoFocus />
+            <div className="flex gap-2">
+              <button onClick={() => setNewActivityOpen(false)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2.5 rounded-xl transition-all">Annulla</button>
+              <button onClick={handleAddActivityType} disabled={loading} className="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 rounded-xl shadow-md transition-all">Aggiungi</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODALE INSERIMENTO TIMESHEET */}
       {tsModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl scale-100 animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-black text-slate-800 flex items-center gap-2"><CalendarDays className="text-teal-600"/> Nuova Attività</h3>
@@ -523,17 +599,34 @@ export default function App() {
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Data</label>
                 <input type="date" value={tsForm.date} onChange={e => setTsForm({...tsForm, date: e.target.value})} className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all" required />
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Dalle ore</label>
+                    <input type="time" value={tsForm.startTime} onChange={e => setTsForm({...tsForm, startTime: e.target.value})} className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all" required />
+                </div>
+                <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Alle ore</label>
+                    <input type="time" value={tsForm.endTime} onChange={e => setTsForm({...tsForm, endTime: e.target.value})} className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all" required />
+                </div>
+              </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Ore Impiegate</label>
-                <input type="number" step="0.5" min="0" value={tsForm.hours} onChange={e => setTsForm({...tsForm, hours: e.target.value})} placeholder="Es. 2.5" className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all" required />
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Tipologia Attività</label>
+                <div className="flex gap-2">
+                    <select value={tsForm.activityType} onChange={e => setTsForm({...tsForm, activityType: e.target.value})} className="flex-1 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all cursor-pointer">
+                        {data.activityTypes.map((t, i) => ( <option key={i} value={t}>{t}</option> ))}
+                    </select>
+                    <button type="button" onClick={() => setNewActivityOpen(true)} className="bg-teal-50 text-teal-600 border border-teal-100 px-4 rounded-xl hover:bg-teal-100 transition-colors flex items-center justify-center" title="Aggiungi nuova tipologia">
+                        <Plus size={18} />
+                    </button>
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Note / Descrizione</label>
-                <textarea value={tsForm.notes} onChange={e => setTsForm({...tsForm, notes: e.target.value})} placeholder="Cosa hai fatto?" rows={3} className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all resize-none"></textarea>
+                <textarea value={tsForm.notes} onChange={e => setTsForm({...tsForm, notes: e.target.value})} placeholder="Dettagli di cosa è stato fatto..." rows={3} className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all resize-none"></textarea>
               </div>
               <div className="pt-4">
                 <button type="submit" disabled={loading} className={`w-full ${loading ? 'bg-slate-400' : 'bg-teal-600 hover:bg-teal-700 shadow-teal-600/20'} text-white font-bold py-3.5 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2`}>
-                  {loading ? <RefreshCw size={18} className="animate-spin" /> : <CheckCircle2 size={18} />} Salva Attività
+                  {loading ? <RefreshCw size={18} className="animate-spin" /> : <CheckCircle2 size={18} />} Salva nel Database
                 </button>
               </div>
             </form>
@@ -683,36 +776,54 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
                 <div className="flex justify-between items-end mb-6">
                   <SectionTitle icon={CalendarDays} title="Time sheet Operativo" subtitle="Area Personale - Responsabile Assistenza Tecnica" colorClass="text-teal-600" bgClass="bg-teal-100" />
                   <button onClick={() => setTsModalOpen(true)} className="flex items-center gap-2 px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-teal-600/20 transition-all mb-5">
-                    <Plus size={18} /> Aggiungi Ore
+                    <Plus size={18} /> Aggiungi Attività
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <KPICard label={`Ore Totali (${timeframe === 'year' ? 'Anno' : timeframe === 'month' ? 'Mese' : 'Sett.'})`} current={kpi.curr.tsHours} previous={kpi.prev.tsHours} unit="h" icon={Timer} colorClass="text-teal-500" />
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-1">
+                    <KPICard label={`Ore Totali (${timeframe === 'year' ? 'Anno' : timeframe === 'month' ? 'Mese' : 'Sett.'})`} current={kpi.curr.tsHours} previous={kpi.prev.tsHours} unit="h" icon={Timer} colorClass="text-teal-500" />
+                  </div>
+                  <div className="lg:col-span-2">
+                    <ChartContainer title="Distribuzione Ore per Tipologia Attività" isEmpty={tsInsights.length === 0} height={180}>
+                      <BarChart data={tsInsights} layout="vertical" margin={{ top: 10, right: 30, left: 40, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                        <XAxis type="number" axisLine={false} tickLine={false} tick={{fontSize:12, fill:'#64748b'}} />
+                        <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fontSize:11, fill:'#64748b'}} width={120} />
+                        <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.1)'}}/>
+                        <Bar dataKey="hours" fill="#14b8a6" radius={[0,4,4,0]} name="Ore Impiegate" barSize={25}/>
+                      </BarChart>
+                    </ChartContainer>
+                  </div>
                 </div>
 
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden mt-6">
                   <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wide flex items-center gap-2"><Activity size={16} className="text-teal-500"/> Registro Attività</h3>
+                    <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wide flex items-center gap-2"><Activity size={16} className="text-teal-500"/> Registro Attività (Dettaglio)</h3>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="border-b border-slate-100 bg-white">
                           <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase w-32">Data</th>
-                          <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase w-24 text-center">Ore</th>
+                          <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase w-32">Orario</th>
+                          <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase w-48">Attività</th>
                           <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase">Note</th>
                           <th className="px-6 py-4 w-16"></th>
                         </tr>
                       </thead>
                       <tbody>
-                        {data.timesheet.filter(x => safeInRange(x.date, periods.curr.start, periods.curr.end)).length === 0 ? (
-                          <tr><td colSpan="4" className="px-6 py-12 text-center text-sm font-medium text-slate-400 bg-slate-50/50">Nessuna attività registrata in questo periodo.</td></tr>
+                        {currentTimesheetList.length === 0 ? (
+                          <tr><td colSpan="5" className="px-6 py-12 text-center text-sm font-medium text-slate-400 bg-slate-50/50">Nessuna attività registrata in questo periodo.</td></tr>
                         ) : (
-                          data.timesheet.filter(x => safeInRange(x.date, periods.curr.start, periods.curr.end)).map((entry) => (
+                          currentTimesheetList.map((entry) => (
                             <tr key={entry.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors group">
                               <td className="px-6 py-4 text-sm font-bold text-slate-700 whitespace-nowrap">{format(parseISO(entry.date), 'dd MMM yyyy', {locale: it})}</td>
-                              <td className="px-6 py-4 text-center"><span className="bg-teal-50 text-teal-700 font-black text-sm px-3 py-1 rounded-lg">{entry.hours}</span></td>
+                              <td className="px-6 py-4 text-sm text-slate-600 whitespace-nowrap">
+                                <span className="font-bold text-slate-800">{entry.start_time?.substring(0,5)}</span> - <span className="font-bold text-slate-800">{entry.end_time?.substring(0,5)}</span>
+                                <span className="ml-2 text-[10px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded-md font-bold">{entry.hours}h</span>
+                              </td>
+                              <td className="px-6 py-4 text-sm font-bold text-teal-700">{entry.activity_type || 'Generico'}</td>
                               <td className="px-6 py-4 text-sm text-slate-600 break-words">{entry.notes || '-'}</td>
                               <td className="px-6 py-4 text-right">
                                 <button onClick={() => handleDeleteTimesheet(entry.id)} className="text-slate-300 hover:text-rose-500 p-2 rounded-lg hover:bg-rose-50 transition-all opacity-0 group-hover:opacity-100" title="Elimina record">
@@ -845,7 +956,7 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
                 
                 <div className="bg-slate-900 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between shadow-lg mb-6 border border-slate-800">
                   <div className="flex items-center gap-4">
-                    <div className="bg-blue-500/20 p-3 rounded-xl"><UploadCloud size={24} className="text-blue-400"/></div>
+                    <div className="bg-blue-500/20 p-3 rounded-xl">{loading ? <RefreshCw size={24} className="text-blue-400 animate-spin"/> : <UploadCloud size={24} className="text-blue-400"/>}</div>
                     <div>
                       <h3 className="text-white font-bold text-sm md:text-base">Sincronizza Storico Chat</h3>
                       <p className="text-slate-400 text-xs mt-1">Carica il file "Cronologia" per aggiornare Volumi, Heatmap e Classifiche automaticamente.</p>
