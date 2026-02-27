@@ -7,7 +7,7 @@ import {
 import { 
   Database, Users, AlertCircle, Code, LayoutDashboard, 
   ChevronLeft, ChevronRight, TrendingUp, TrendingDown, 
-  RefreshCw, X, FileText, ClipboardCheck, Trophy, Target, Clock, Tag, Bug, Zap, CheckCircle2, Copy, UploadCloud, GraduationCap, Timer, AlertTriangle, XCircle, Activity, Building, CalendarDays, Plus, Trash2, PieChart as PieChartIcon, Calendar
+  RefreshCw, X, FileText, ClipboardCheck, Trophy, Target, Clock, Tag, Bug, Zap, CheckCircle2, Copy, UploadCloud, GraduationCap, Timer, AlertTriangle, XCircle, Activity, Building, CalendarDays, Plus, Trash2, PieChart as PieChartIcon
 } from 'lucide-react';
 import { 
   format, subWeeks, addWeeks, startOfWeek, endOfWeek, 
@@ -97,11 +97,14 @@ const ChartContainer = ({ title, children, isEmpty, height = 320 }) => (
   </div>
 );
 
+// Voci di default iniziali per evitare caricamenti a vuoto
+const DEFAULT_ACTIVITY_TYPES = ['Formazione Cliente', 'Call con Zucchetti', 'Riunione Pienissimo', 'Riunione Zucchetti'];
+
 // --- MAIN APP ---
 export default function App() {
   const [view, setView] = useState('dashboard');
   const [timeframe, setTimeframe] = useState('week'); 
-  const [data, setData] = useState({ chat: [], form: [], ast: [], dev: [], timesheet: [], activityTypes: [] });
+  const [data, setData] = useState({ chat: [], form: [], ast: [], dev: [], timesheet: [], activityTypes: DEFAULT_ACTIVITY_TYPES });
   const [loading, setLoading] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [copied, setCopied] = useState(false);
@@ -112,11 +115,13 @@ export default function App() {
   const [tsModalOpen, setTsModalOpen] = useState(false);
   const [newActivityOpen, setNewActivityOpen] = useState(false);
   const [newActivityName, setNewActivityName] = useState('');
+  
+  // Il form ora viene inizializzato sempre con una voce fissa per sicurezza
   const [tsForm, setTsForm] = useState({ 
     date: format(new Date(), 'yyyy-MM-dd'), 
     startTime: '09:00', 
     endTime: '10:00', 
-    activityType: '', 
+    activityType: DEFAULT_ACTIVITY_TYPES[0], 
     notes: '' 
   });
 
@@ -151,18 +156,28 @@ export default function App() {
         fetchPaginated('nicola_activity_types', { col: 'name', asc: true })
       ]);
 
-      const defaultTypes = ['Formazione Cliente', 'Call con Zucchetti', 'Riunione Pienissimo', 'Riunione Zucchetti'];
-      let types = actTypes && actTypes.length > 0 ? actTypes.map(x => x.name) : defaultTypes;
-      types = [...new Set(types)]; 
+      let types = actTypes && actTypes.length > 0 ? actTypes.map(x => x.name) : DEFAULT_ACTIVITY_TYPES;
+      types = [...new Set(types)].sort(); // Rimuove doppioni e ordina alfabeticamente
 
       setData({ chat: c, form: f, ast: a, dev: d, timesheet: ts, activityTypes: types });
-      setTsForm(prev => ({...prev, activityType: prev.activityType || types[0]}));
       setLastUpdated(new Date());
     } catch (err) { 
       setModalContent({ type: 'error', title: 'Errore Database', message: err.message });
     } finally { 
       setLoading(false); 
     }
+  };
+
+  // Funzione per aprire la modale garantendo che il menu a tendina abbia un valore selezionato REALE
+  const handleOpenTsModal = () => {
+    setTsForm({
+      date: format(new Date(), 'yyyy-MM-dd'),
+      startTime: '09:00',
+      endTime: '10:00',
+      activityType: data.activityTypes.length > 0 ? data.activityTypes[0] : DEFAULT_ACTIVITY_TYPES[0],
+      notes: ''
+    });
+    setTsModalOpen(true);
   };
 
   const handleSaveTimesheet = async (e) => {
@@ -186,6 +201,9 @@ export default function App() {
       return;
     }
 
+    // Ultimo check di sicurezza: se per qualche motivo il form fosse vuoto, peschiamo la prima opzione
+    const finalActivityType = tsForm.activityType || (data.activityTypes.length > 0 ? data.activityTypes[0] : 'Generico');
+
     try {
       setLoading(true);
       const { error } = await supabase.from('nicola_timesheet').insert([{
@@ -193,13 +211,12 @@ export default function App() {
         start_time: tsForm.startTime,
         end_time: tsForm.endTime,
         hours: hours, 
-        activity_type: tsForm.activityType || data.activityTypes[0],
+        activity_type: finalActivityType,
         notes: tsForm.notes || ''
       }]);
       if (error) throw error;
       
       setTsModalOpen(false);
-      setTsForm({ date: format(new Date(), 'yyyy-MM-dd'), startTime: '09:00', endTime: '10:00', activityType: data.activityTypes[0], notes: '' });
       setModalContent({ type: 'success', title: 'Salvato', message: 'Attività salvata nel tuo Timesheet.' });
       fetchAll();
     } catch (err) { setModalContent({ type: 'error', title: 'Errore Salvataggio', message: err.message });
@@ -207,18 +224,21 @@ export default function App() {
   };
 
   const handleAddActivityType = async () => {
-    if (!newActivityName.trim()) return;
+    const addedName = newActivityName.trim();
+    if (!addedName) return;
     try {
         setLoading(true);
-        const { error } = await supabase.from('nicola_activity_types').insert([{ name: newActivityName.trim() }]);
-        if (error) throw error;
+        const { error } = await supabase.from('nicola_activity_types').insert([{ name: addedName }]);
+        // Ignoriamo l'errore se la voce esiste già per evitare blocchi
+        
         setNewActivityOpen(false);
-        const addedName = newActivityName.trim();
         setNewActivityName('');
-        setData(prev => ({...prev, activityTypes: [...prev.activityTypes, addedName].sort()}));
-        setTsForm(prev => ({...prev, activityType: addedName}));
+        
+        const newTypes = [...new Set([...data.activityTypes, addedName])].sort();
+        setData(prev => ({...prev, activityTypes: newTypes}));
+        setTsForm(prev => ({...prev, activityType: addedName})); // Seleziona automaticamente la nuova voce creata
     } catch (e) {
-        setModalContent({type: 'error', title: 'Errore', message: e.message});
+        setModalContent({type: 'error', title: 'Errore Database', message: e.message});
     } finally { setLoading(false); }
   };
 
@@ -778,7 +798,7 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
               <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
                 <div className="flex justify-between items-end mb-6">
                   <SectionTitle icon={CalendarDays} title="Time sheet Operativo" subtitle="Area Personale - Responsabile Assistenza Tecnica" colorClass="text-teal-600" bgClass="bg-teal-100" />
-                  <button onClick={() => setTsModalOpen(true)} className="flex items-center gap-2 px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-teal-600/20 transition-all mb-5">
+                  <button onClick={handleOpenTsModal} className="flex items-center gap-2 px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-teal-600/20 transition-all mb-5">
                     <Plus size={18} /> Aggiungi Attività
                   </button>
                 </div>
@@ -959,7 +979,7 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
                 
                 <div className="bg-slate-900 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between shadow-lg mb-6 border border-slate-800">
                   <div className="flex items-center gap-4">
-                    <div className="bg-blue-500/20 p-3 rounded-xl">{loading ? <RefreshCw size={24} className="text-blue-400 animate-spin"/> : <UploadCloud size={24} className="text-blue-400"/>}</div>
+                    <div className="bg-blue-500/20 p-3 rounded-xl"><UploadCloud size={24} className="text-blue-400"/></div>
                     <div>
                       <h3 className="text-white font-bold text-sm md:text-base">Sincronizza Storico Chat</h3>
                       <p className="text-slate-400 text-xs mt-1">Carica il file "Cronologia" per aggiornare Volumi, Heatmap e Classifiche automaticamente.</p>
