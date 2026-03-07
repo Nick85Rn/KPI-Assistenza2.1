@@ -97,7 +97,6 @@ const ChartContainer = ({ title, children, isEmpty, height = 320 }) => (
   </div>
 );
 
-// Voci di default iniziali per evitare caricamenti a vuoto
 const DEFAULT_ACTIVITY_TYPES = ['Formazione Cliente', 'Call con Zucchetti', 'Riunione Pienissimo', 'Riunione Zucchetti'];
 
 // --- MAIN APP ---
@@ -111,7 +110,6 @@ export default function App() {
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [modalContent, setModalContent] = useState(null);
 
-  // STATI PER IL TIMESHEET E LA NUOVA ATTIVITA'
   const [tsModalOpen, setTsModalOpen] = useState(false);
   const [newActivityOpen, setNewActivityOpen] = useState(false);
   const [newActivityName, setNewActivityName] = useState('');
@@ -226,10 +224,8 @@ export default function App() {
     try {
         setLoading(true);
         const { error } = await supabase.from('nicola_activity_types').insert([{ name: addedName }]);
-        
         setNewActivityOpen(false);
         setNewActivityName('');
-        
         const newTypes = [...new Set([...data.activityTypes, addedName])].sort();
         setData(prev => ({...prev, activityTypes: newTypes}));
         setTsForm(prev => ({...prev, activityType: addedName})); 
@@ -268,6 +264,7 @@ export default function App() {
     return rows;
   };
 
+  // IMPORT CHAT
   const handleChatImport = async (e) => {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
@@ -303,6 +300,7 @@ export default function App() {
     reader.readAsText(file);
   };
 
+  // IMPORT FORMAZIONE CON UNIQUE ID E SOVRASCRITTURA
   const handleFormazioneImport = async (e) => {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
@@ -332,17 +330,42 @@ export default function App() {
           if (t.includes('bug') || t.includes('lavori') || t.includes('assistenza') || t.includes('ticket')) return 'Assistenza Pura';
           return 'Formazione Generale';
         };
+        
         for (let i = headerIdx + 1; i < parsedRows.length; i++) {
           const values = parsedRows[i]; if (values.length < 5) continue; 
           const getVal = (col) => { const idx = headers.findIndex(h => h.includes(col)); return idx !== -1 ? values[idx] : ''; };
-          const title = getVal('Nome Nota Reparto Tecnico'); const company = getVal('Azienda'); const creator = getVal('Creato da') || getVal('Proprietario di Nota Reparto Tecnico');
-          const desc = getVal('Descrizione'); const duration = parseInt(getVal('Durata Formazione (in minuti)'), 10) || 0; const createdAt = getVal('Ora creazione');
+          
+          const title = getVal('Nome Nota Reparto Tecnico'); 
+          const company = getVal('Azienda'); 
+          const creator = getVal('Creato da') || getVal('Proprietario di Nota Reparto Tecnico');
+          const desc = getVal('Descrizione'); 
+          const duration = parseInt(getVal('Durata Formazione (in minuti)'), 10) || 0; 
+          const createdAt = getVal('Ora creazione');
+          
           if (!title && !company) continue;
-          records.push({ topic: classifyTopic(title, desc), original_title: title, company: company, operator: creator, description: desc, duration_minutes: duration, created_time: parseItalianDate(createdAt) || new Date().toISOString() });
+          
+          // Genera un ID univoco basato sull'Azienda e l'Ora della creazione
+          const uniqueId = `${company}_${createdAt}`.replace(/\s+/g, '_');
+          
+          records.push({ 
+            unique_id: uniqueId,
+            topic: classifyTopic(title, desc), 
+            original_title: title, 
+            company: company, 
+            operator: creator, 
+            description: desc, 
+            duration_minutes: duration, 
+            created_time: parseItalianDate(createdAt) || new Date().toISOString() 
+          });
         }
+        
         if (records.length === 0) throw new Error("Nessuna riga valida trovata.");
-        for (let i = 0; i < records.length; i += 500) { await supabase.from('zoho_raw_formazione').insert(records.slice(i, i + 500)); }
-        setModalContent({ type: 'success', title: 'Classificazione Completata', message: `Sono state analizzate e salvate ${records.length} sessioni di formazione.` });
+        
+        // Uso upsert con la chiave univoca
+        for (let i = 0; i < records.length; i += 500) { 
+            await supabase.from('zoho_raw_formazione').upsert(records.slice(i, i + 500), { onConflict: 'unique_id' }); 
+        }
+        setModalContent({ type: 'success', title: 'Classificazione Completata', message: `Sono state analizzate e salvate ${records.length} sessioni di formazione. I dati modificati sono stati sovrascritti.` });
         fetchAll(); 
       } catch (err) { setModalContent({ type: 'error', title: 'Errore Formazione', message: err.message }); } finally { setLoading(false); e.target.value = ''; }
     };
@@ -549,7 +572,7 @@ export default function App() {
     }
   }, [data, periods.curr, timeframe]);
 
-  // TIMESHEET CHART (NUOVA UX IBRIDA)
+  // TIMESHEET CHART
   const tsInsights = useMemo(() => {
     const list = data.timesheet.filter(x => safeInRange(x.date, periods.curr.start, periods.curr.end));
     const map = {};
@@ -561,10 +584,8 @@ export default function App() {
     return Object.values(map).sort((a,b) => b.hours - a.hours);
   }, [data.timesheet, periods.curr]);
 
-  // LISTA GLOBALE TIMESHEET CORRENTE
   const currentTimesheetList = data.timesheet.filter(x => safeInRange(x.date, periods.curr.start, periods.curr.end));
 
-  // Dati grafici comparativi per il Report Executive
   const execChartData = [
     { name: 'Chat', Corrente: kpi.curr.chatVol, Precedente: kpi.prev.chatVol },
     { name: 'Formazioni', Corrente: kpi.curr.formCount, Precedente: kpi.prev.formCount },
@@ -591,7 +612,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODALE NUOVA ATTIVITA (SOPRA IL TIMESHEET) */}
+      {/* MODALE NUOVA ATTIVITA */}
       {newActivityOpen && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl scale-100 animate-in zoom-in-95 duration-200">
@@ -789,7 +810,7 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
               </div>
             )}
 
-            {/* SEZIONE TIMESHEET NICOLA (UX MIGLIORATA!) */}
+            {/* SEZIONE TIMESHEET NICOLA */}
             {view === 'timesheet' && (
               <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
                 <div className="flex justify-between items-end mb-6">
