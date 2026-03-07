@@ -50,39 +50,39 @@ const KPICard = ({ label, current, previous, unit = '', invert = false, type = '
   let displayDiff = type === 'time' ? formatTime(Math.abs(diff)) : type === 'seconds' ? formatSeconds(Math.abs(diff)) : formatNumber(Math.abs(diff));
 
   return (
-    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group h-full flex flex-col justify-between">
+    <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group h-full flex flex-col justify-between">
       <div className="flex justify-between items-start mb-2">
-        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{label}</p>
+        <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-widest">{label}</p>
         {Icon && <Icon size={16} className={`${colorClass} opacity-50 group-hover:opacity-100 transition-opacity`} />}
       </div>
-      <div className="flex items-baseline gap-1.5 mt-2">
-        <span className="text-3xl font-black text-slate-800 tracking-tight">{displayCurrent}</span>
+      <div className="flex items-baseline gap-1.5 mt-1 md:mt-2">
+        <span className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight">{displayCurrent}</span>
         <span className="text-xs font-bold text-slate-400">{unit}</span>
       </div>
-      <div className="mt-4 flex items-center justify-between">
-        <div className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold ${trendColor}`}>
+      <div className="mt-3 md:mt-4 flex items-center justify-between">
+        <div className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] md:text-[11px] font-bold ${trendColor}`}>
           {diff > 0 ? <TrendingUp size={12}/> : diff < 0 ? <TrendingDown size={12}/> : null}
           {displayDiff}
         </div>
-        <span className="text-[10px] font-medium text-slate-400">vs prec.</span>
+        <span className="text-[9px] md:text-[10px] font-medium text-slate-400">vs prec.</span>
       </div>
     </div>
   );
 };
 
 const SectionTitle = ({ icon: Icon, title, colorClass, bgClass, subtitle }) => (
-  <div className="flex items-center gap-3 mb-5">
-    <div className={`p-2 rounded-xl ${bgClass} shadow-sm`}><Icon size={20} className={colorClass} /></div>
+  <div className="flex items-center gap-3 mb-4 md:mb-5">
+    <div className={`p-2 rounded-xl ${bgClass} shadow-sm shrink-0`}><Icon size={20} className={colorClass} /></div>
     <div>
-      <h2 className="text-lg font-black text-slate-800 tracking-wide">{title}</h2>
-      {subtitle && <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{subtitle}</p>}
+      <h2 className="text-base md:text-lg font-black text-slate-800 tracking-wide leading-tight">{title}</h2>
+      {subtitle && <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest">{subtitle}</p>}
     </div>
   </div>
 );
 
 const ChartContainer = ({ title, children, isEmpty, height = 320 }) => (
-  <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm w-full flex flex-col" style={{height: `${height}px`}}>
-    <h3 className="font-bold text-slate-800 mb-6 flex-shrink-0 text-sm uppercase tracking-wide">{title}</h3>
+  <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-100 shadow-sm w-full flex flex-col" style={{height: `${height}px`}}>
+    <h3 className="font-bold text-slate-800 mb-4 md:mb-6 flex-shrink-0 text-xs md:text-sm uppercase tracking-wide truncate">{title}</h3>
     <div className="flex-1 w-full relative min-h-0">
       {isEmpty ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300 bg-slate-50 rounded-xl border border-dashed border-slate-200 m-2">
@@ -223,7 +223,7 @@ export default function App() {
     if (!addedName) return;
     try {
         setLoading(true);
-        const { error } = await supabase.from('nicola_activity_types').insert([{ name: addedName }]);
+        await supabase.from('nicola_activity_types').insert([{ name: addedName }]);
         setNewActivityOpen(false);
         setNewActivityName('');
         const newTypes = [...new Set([...data.activityTypes, addedName])].sort();
@@ -264,7 +264,6 @@ export default function App() {
     return rows;
   };
 
-  // IMPORT CHAT
   const handleChatImport = async (e) => {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
@@ -300,7 +299,6 @@ export default function App() {
     reader.readAsText(file);
   };
 
-  // IMPORT FORMAZIONE CON UNIQUE ID E SOVRASCRITTURA
   const handleFormazioneImport = async (e) => {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
@@ -312,7 +310,8 @@ export default function App() {
         let headerIdx = -1;
         for (let i = 0; i < Math.min(10, parsedRows.length); i++) { if (parsedRows[i].some(col => col.includes('Durata Formazione'))) { headerIdx = i; break; } }
         if (headerIdx === -1) throw new Error("Intestazioni non trovate. Assicurati che sia il 'Report Assistenza Tecnica_per operatore.csv'.");
-        const headers = parsedRows[headerIdx]; const records = [];
+        const headers = parsedRows[headerIdx]; 
+        
         const parseItalianDate = (dateStr) => {
           if (!dateStr) return null;
           const months = { 'gen': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'mag': 4, 'giu': 5, 'lug': 6, 'ago': 7, 'set': 8, 'ott': 9, 'nov': 10, 'dic': 11 };
@@ -330,42 +329,55 @@ export default function App() {
           if (t.includes('bug') || t.includes('lavori') || t.includes('assistenza') || t.includes('ticket')) return 'Assistenza Pura';
           return 'Formazione Generale';
         };
-        
+
+        const seenIds = new Set();
+        const uniqueRecords = [];
+
         for (let i = headerIdx + 1; i < parsedRows.length; i++) {
           const values = parsedRows[i]; if (values.length < 5) continue; 
           const getVal = (col) => { const idx = headers.findIndex(h => h.includes(col)); return idx !== -1 ? values[idx] : ''; };
           
-          const title = getVal('Nome Nota Reparto Tecnico'); 
-          const company = getVal('Azienda'); 
-          const creator = getVal('Creato da') || getVal('Proprietario di Nota Reparto Tecnico');
-          const desc = getVal('Descrizione'); 
+          const title = getVal('Nome Nota Reparto Tecnico') || ''; 
+          const company = getVal('Azienda') || 'Sconosciuta'; 
+          const creator = getVal('Creato da') || getVal('Proprietario di Nota Reparto Tecnico') || '';
+          const desc = getVal('Descrizione') || ''; 
           const duration = parseInt(getVal('Durata Formazione (in minuti)'), 10) || 0; 
-          const createdAt = getVal('Ora creazione');
+          const createdAt = getVal('Ora creazione') || '';
           
-          if (!title && !company) continue;
+          if (!title && !company && !createdAt) continue;
+
+          // Crea un hash stringa della descrizione per renderlo super-univoco (in caso di 2 note nello stesso minuto)
+          let hash = 0;
+          for (let j = 0; j < desc.length; j++) { hash = ((hash << 5) - hash) + desc.charCodeAt(j); hash |= 0; }
+          const hashStr = Math.abs(hash).toString(16);
           
-          // Genera un ID univoco basato sull'Azienda e l'Ora della creazione
-          const uniqueId = `${company}_${createdAt}`.replace(/\s+/g, '_');
+          const rawId = `${company}_${createdAt}_${duration}_${hashStr}`;
+          const uniqueId = rawId.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 150);
           
-          records.push({ 
-            unique_id: uniqueId,
-            topic: classifyTopic(title, desc), 
-            original_title: title, 
-            company: company, 
-            operator: creator, 
-            description: desc, 
-            duration_minutes: duration, 
-            created_time: parseItalianDate(createdAt) || new Date().toISOString() 
-          });
+          // Setaccia eventuali doppioni identici interni al CSV
+          if (!seenIds.has(uniqueId)) {
+             seenIds.add(uniqueId);
+             uniqueRecords.push({ 
+                unique_id: uniqueId, 
+                topic: classifyTopic(title, desc), 
+                original_title: title, 
+                company: company, 
+                operator: creator, 
+                description: desc, 
+                duration_minutes: duration, 
+                created_time: parseItalianDate(createdAt) || new Date().toISOString() 
+             });
+          }
         }
         
-        if (records.length === 0) throw new Error("Nessuna riga valida trovata.");
+        if (uniqueRecords.length === 0) throw new Error("Nessuna riga valida trovata.");
         
-        // Uso upsert con la chiave univoca
-        for (let i = 0; i < records.length; i += 500) { 
-            await supabase.from('zoho_raw_formazione').upsert(records.slice(i, i + 500), { onConflict: 'unique_id' }); 
+        for (let i = 0; i < uniqueRecords.length; i += 500) { 
+            const { error } = await supabase.from('zoho_raw_formazione').upsert(uniqueRecords.slice(i, i + 500), { onConflict: 'unique_id' }); 
+            if (error) throw error;
         }
-        setModalContent({ type: 'success', title: 'Classificazione Completata', message: `Sono state analizzate e salvate ${records.length} sessioni di formazione. I dati modificati sono stati sovrascritti.` });
+        
+        setModalContent({ type: 'success', title: 'Importazione Completata', message: `Sono state analizzate e salvate ${uniqueRecords.length} sessioni di formazione. I dati esistenti sono stati sovrascritti con successo.` });
         fetchAll(); 
       } catch (err) { setModalContent({ type: 'error', title: 'Errore Formazione', message: err.message }); } finally { setLoading(false); e.target.value = ''; }
     };
@@ -629,7 +641,7 @@ export default function App() {
       {/* MODALE INSERIMENTO TIMESHEET */}
       {tsModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl scale-100 animate-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl scale-100 animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-black text-slate-800 flex items-center gap-2"><CalendarDays className="text-teal-600"/> Nuova Attività</h3>
               <button onClick={() => setTsModalOpen(false)} className="text-slate-400 hover:text-slate-600 bg-slate-100 p-1.5 rounded-full"><X size={16}/></button>
@@ -674,8 +686,8 @@ export default function App() {
         </div>
       )}
 
-      {/* SIDEBAR */}
-      <div className="w-64 bg-white border-r border-slate-200 flex flex-col z-20 shrink-0">
+      {/* DESKTOP SIDEBAR */}
+      <div className="hidden md:flex w-64 bg-white border-r border-slate-200 flex-col z-20 shrink-0">
         <div className="p-6 overflow-y-auto">
           <div className="flex items-center gap-3 mb-8">
             <div className="bg-slate-900 p-2 rounded-xl shadow-md"><Database className="text-white" size={18} /></div>
@@ -707,36 +719,35 @@ export default function App() {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* TOPBAR */}
-        <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex justify-between items-center z-10 sticky top-0 shrink-0">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner">
-              <button onClick={() => setTimeframe('week')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${timeframe === 'week' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>Settimana</button>
-              <button onClick={() => setTimeframe('month')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${timeframe === 'month' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>Mese</button>
-              <button onClick={() => setTimeframe('year')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${timeframe === 'year' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>Anno</button>
-            </div>
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+        {/* TOPBAR RESPONSIVE */}
+        <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 md:px-8 py-3 flex flex-col md:flex-row justify-between items-center gap-3 z-10 sticky top-0 shrink-0">
+          <div className="flex items-center justify-start gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner overflow-x-auto w-full md:w-auto hide-scrollbar">
+            <button onClick={() => setTimeframe('week')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${timeframe === 'week' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>Settimana</button>
+            <button onClick={() => setTimeframe('month')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${timeframe === 'month' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>Mese</button>
+            <button onClick={() => setTimeframe('year')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${timeframe === 'year' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>Anno</button>
+          </div>
+          <div className="flex items-center justify-between w-full md:w-auto gap-2 md:gap-4">
             <div className="flex items-center gap-1 bg-slate-100 p-1.5 rounded-xl border border-slate-200 shadow-inner">
               <button onClick={handlePrevPeriod} className="p-1.5 hover:bg-white rounded-lg transition-all"><ChevronLeft size={16}/></button>
-              <span className="text-xs font-black px-4 uppercase tracking-widest text-slate-700">{periods.curr.label}</span>
+              <span className="text-[10px] md:text-xs font-black px-2 md:px-4 uppercase tracking-widest text-slate-700 truncate min-w-[80px] text-center">{periods.curr.label}</span>
               <button onClick={handleNextPeriod} className="p-1.5 hover:bg-white rounded-lg transition-all"><ChevronRight size={16}/></button>
             </div>
-          </div>
-          <div className="flex items-start gap-4">
-            <div className="flex flex-col items-end justify-center h-[36px]">
+            <div className="flex flex-col items-end justify-center hidden md:flex h-[36px]">
               <span className="text-[10px] text-slate-400 font-medium">Ultimo CSV: {format(lastUpdated, 'HH:mm')}</span>
               <span className="text-[10px] font-bold text-emerald-500 flex items-center gap-1"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> DB Attivo</span>
             </div>
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto p-8 pb-32">
-          <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        {/* MAIN CONTENT CON PADDING INFERIORE PER MOBILE NAV */}
+        <main className="flex-1 overflow-auto p-4 md:p-8 pb-24 md:pb-8">
+          <div className="max-w-7xl mx-auto space-y-6 md:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
             {/* SEZIONE REPORT EXECUTIVE TABS */}
             {view === 'report' && (
               <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
-                <div className="flex justify-between items-end mb-6">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 gap-4">
                   <SectionTitle icon={PieChartIcon} title="Report Executive" subtitle="Sintesi manageriale esportabile" colorClass="text-rose-600" bgClass="bg-rose-100" />
                   <button onClick={() => {
                     const c = kpi.curr; const p = kpi.prev;
@@ -764,25 +775,25 @@ In questo periodo il team ha gestito ${c.chatVol} chat (attesa media ${formatSec
 Generato automaticamente da Pienissimo.bi`;
                     navigator.clipboard.writeText(text);
                     setCopied(true); setTimeout(() => setCopied(false), 2000);
-                  }} className="flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-rose-600/20 transition-all mb-5">
-                    {copied ? <CheckCircle2 size={18} /> : <Copy size={18} />} {copied ? 'Testo Copiato!' : 'Copia Testo per Riunione'}
+                  }} className="flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-rose-600/20 transition-all w-full md:w-auto justify-center">
+                    {copied ? <CheckCircle2 size={18} /> : <Copy size={18} />} {copied ? 'Testo Copiato!' : 'Copia Testo Riunione'}
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                   <KPICard label="Chat Gestite" current={kpi.curr.chatVol} previous={kpi.prev.chatVol} icon={Users} colorClass="text-blue-500" />
-                  <KPICard label="Formazioni Erogate" current={kpi.curr.formCount} previous={kpi.prev.formCount} icon={GraduationCap} colorClass="text-purple-500" />
-                  <KPICard label="Nuovi Ticket Clienti" current={kpi.curr.astIn} previous={kpi.prev.astIn} invert icon={AlertCircle} colorClass="text-emerald-500" />
-                  <KPICard label="Nuovi Bug / Dev" current={kpi.curr.devIn} previous={kpi.prev.devIn} invert icon={Code} colorClass="text-amber-500" />
+                  <KPICard label="Formazioni" current={kpi.curr.formCount} previous={kpi.prev.formCount} icon={GraduationCap} colorClass="text-purple-500" />
+                  <KPICard label="Ticket Clienti" current={kpi.curr.astIn} previous={kpi.prev.astIn} invert icon={AlertCircle} colorClass="text-emerald-500" />
+                  <KPICard label="Bug / Dev" current={kpi.curr.devIn} previous={kpi.prev.devIn} invert icon={Code} colorClass="text-amber-500" />
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="bg-white rounded-3xl p-8 relative shadow-sm border border-slate-200">
+                  <div className="bg-white rounded-3xl p-6 md:p-8 relative shadow-sm border border-slate-200">
                     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
                       <div className="bg-rose-50 border border-rose-100 p-2.5 rounded-xl"><ClipboardCheck size={22} className="text-rose-600"/></div>
-                      <h3 className="font-bold uppercase text-sm tracking-widest text-slate-800">Testo Riassuntivo (Anteprima)</h3>
+                      <h3 className="font-bold uppercase text-xs md:text-sm tracking-widest text-slate-800">Testo Riassuntivo (Anteprima)</h3>
                     </div>
-                    <div className="text-slate-700 font-medium text-[14px] leading-relaxed whitespace-pre-wrap font-sans">
+                    <div className="text-slate-700 font-medium text-[13px] md:text-[14px] leading-relaxed whitespace-pre-wrap font-sans">
                       {`In questo periodo il team ha gestito ${kpi.curr.chatVol} chat (attesa media ${formatSeconds(kpi.curr.chatWait)}) ed erogato ${kpi.curr.formCount} sessioni di formazione ai clienti. 
 
 Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${kpi.curr.astOut} (SLA Risoluzione: ${formatTime(kpi.curr.astSlaRes)}), mentre il team Sviluppo ha preso in carico ${kpi.curr.devIn} task tecnici, risolvendone ${kpi.curr.devOut}.
@@ -795,27 +806,27 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
                     </div>
                   </div>
 
-                  <ChartContainer title="Comparazione Volumi (Corrente vs Precedente)" isEmpty={execChartData.every(x => x.Corrente === 0 && x.Precedente === 0)} height={400}>
+                  <ChartContainer title="Comparazione Volumi" isEmpty={execChartData.every(x => x.Corrente === 0 && x.Precedente === 0)} height={400}>
                     <BarChart data={execChartData} margin={{ top: 20, right: 0, left: -20, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize:11, fill:'#64748b'}} />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize:10, fill:'#64748b'}} />
                       <YAxis axisLine={false} tickLine={false} tick={{fontSize:12, fill:'#64748b'}} />
                       <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.1)'}} />
-                      <Legend verticalAlign="top" height={36} iconType="circle"/>
-                      <Bar dataKey="Precedente" fill="#cbd5e1" radius={[4,4,0,0]} barSize={25}/>
-                      <Bar dataKey="Corrente" fill="#f43f5e" radius={[4,4,0,0]} barSize={25}/>
+                      <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{fontSize:'10px'}}/>
+                      <Bar dataKey="Precedente" fill="#cbd5e1" radius={[4,4,0,0]} barSize={20}/>
+                      <Bar dataKey="Corrente" fill="#f43f5e" radius={[4,4,0,0]} barSize={20}/>
                     </BarChart>
                   </ChartContainer>
                 </div>
               </div>
             )}
 
-            {/* SEZIONE TIMESHEET NICOLA */}
+            {/* SEZIONE TIMESHEET NICOLA (Tasto Aggiungi visibile anche da mobile per l'operatività) */}
             {view === 'timesheet' && (
               <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
-                <div className="flex justify-between items-end mb-6">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 gap-4">
                   <SectionTitle icon={CalendarDays} title="Time sheet Operativo" subtitle="Area Personale - Responsabile Assistenza Tecnica" colorClass="text-teal-600" bgClass="bg-teal-100" />
-                  <button onClick={handleOpenTsModal} className="flex items-center gap-2 px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-teal-600/20 transition-all mb-5">
+                  <button onClick={handleOpenTsModal} className="flex items-center gap-2 px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-teal-600/20 transition-all w-full md:w-auto justify-center">
                     <Plus size={18} /> Aggiungi Attività
                   </button>
                 </div>
@@ -827,18 +838,18 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
                   
                   {/* NUOVA UX: ELENCO PROGRESS BAR + GRAFICO A CIAMBELLA */}
                   <div className="lg:col-span-2">
-                    <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm w-full flex flex-col md:flex-row gap-6 h-[220px]">
+                    <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-100 shadow-sm w-full flex flex-col md:flex-row gap-6 h-[250px] md:h-[220px]">
                        <div className="flex-1 min-w-0">
-                           <h3 className="font-bold text-slate-800 mb-4 flex-shrink-0 text-sm uppercase tracking-wide flex items-center gap-2"><PieChartIcon size={16} className="text-teal-500"/> Distribuzione Ore</h3>
+                           <h3 className="font-bold text-slate-800 mb-4 flex-shrink-0 text-xs md:text-sm uppercase tracking-wide flex items-center gap-2"><PieChartIcon size={16} className="text-teal-500"/> Distribuzione Ore</h3>
                            {tsInsights.length === 0 ? <p className="text-xs text-slate-400">Nessun dato nel periodo</p> :
-                           <div className="overflow-y-auto h-[130px] pr-3 space-y-4">
+                           <div className="overflow-y-auto h-[160px] md:h-[130px] pr-2 space-y-4">
                              {tsInsights.map((item, i) => {
                                const pct = kpi.curr.tsHours > 0 ? Math.round((item.hours / kpi.curr.tsHours) * 100) : 0;
                                return (
                                  <div key={i}>
                                    <div className="flex justify-between items-end text-xs mb-1.5">
-                                      <span className="font-bold text-slate-700 truncate mr-2 text-sm" title={item.name}>{item.name}</span>
-                                      <span className="font-black text-teal-600 whitespace-nowrap text-sm">{item.hours}h <span className="text-slate-400 font-medium text-[10px] ml-1">({pct}%)</span></span>
+                                      <span className="font-bold text-slate-700 truncate mr-2 text-xs md:text-sm" title={item.name}>{item.name}</span>
+                                      <span className="font-black text-teal-600 whitespace-nowrap text-xs md:text-sm">{item.hours}h <span className="text-slate-400 font-medium text-[9px] md:text-[10px] ml-1">({pct}%)</span></span>
                                    </div>
                                    <div className="w-full bg-slate-100 rounded-full h-2">
                                       <div className="h-2 rounded-full" style={{ width: `${pct}%`, backgroundColor: COLORS[i % COLORS.length] }}></div>
@@ -849,14 +860,14 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
                            </div>
                            }
                        </div>
-                       <div className="w-[180px] h-[160px] flex-shrink-0 hidden md:flex items-center justify-center">
+                       <div className="w-[140px] md:w-[180px] h-[140px] md:h-[160px] flex-shrink-0 hidden md:flex mx-auto items-center justify-center">
                           {tsInsights.length > 0 && (
                               <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
-                                  <Pie data={tsInsights} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={2} dataKey="hours" nameKey="name">
+                                  <Pie data={tsInsights} cx="50%" cy="50%" innerRadius={40} outerRadius={65} paddingAngle={2} dataKey="hours" nameKey="name">
                                     {tsInsights.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
                                   </Pie>
-                                  <Tooltip contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.1)'}} />
+                                  <Tooltip contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.1)', fontSize:'12px'}} />
                                 </PieChart>
                               </ResponsiveContainer>
                           )}
@@ -866,35 +877,35 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
                 </div>
 
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden mt-6">
-                  <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wide flex items-center gap-2"><Activity size={16} className="text-teal-500"/> Registro Attività (Dettaglio)</h3>
+                  <div className="px-4 md:px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                    <h3 className="font-bold text-slate-800 text-xs md:text-sm uppercase tracking-wide flex items-center gap-2"><Activity size={16} className="text-teal-500"/> Registro Attività</h3>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
+                    <table className="w-full text-left border-collapse min-w-[500px]">
                       <thead>
                         <tr className="border-b border-slate-100 bg-white">
-                          <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase w-32">Data</th>
-                          <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase w-32">Orario</th>
-                          <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase w-48">Attività</th>
-                          <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase">Note</th>
-                          <th className="px-6 py-4 w-16"></th>
+                          <th className="px-4 md:px-6 py-3 text-[10px] md:text-[11px] font-bold text-slate-400 uppercase w-24 md:w-32">Data</th>
+                          <th className="px-4 md:px-6 py-3 text-[10px] md:text-[11px] font-bold text-slate-400 uppercase w-28 md:w-32">Orario</th>
+                          <th className="px-4 md:px-6 py-3 text-[10px] md:text-[11px] font-bold text-slate-400 uppercase w-40 md:w-48">Attività</th>
+                          <th className="px-4 md:px-6 py-3 text-[10px] md:text-[11px] font-bold text-slate-400 uppercase">Note</th>
+                          <th className="px-4 md:px-6 py-3 w-12 md:w-16"></th>
                         </tr>
                       </thead>
                       <tbody>
                         {currentTimesheetList.length === 0 ? (
-                          <tr><td colSpan="5" className="px-6 py-12 text-center text-sm font-medium text-slate-400 bg-slate-50/50">Nessuna attività registrata in questo periodo.</td></tr>
+                          <tr><td colSpan="5" className="px-6 py-12 text-center text-xs md:text-sm font-medium text-slate-400 bg-slate-50/50">Nessuna attività in questo periodo.</td></tr>
                         ) : (
                           currentTimesheetList.map((entry) => (
                             <tr key={entry.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors group">
-                              <td className="px-6 py-4 text-sm font-bold text-slate-700 whitespace-nowrap">{format(parseISO(entry.date), 'dd MMM yyyy', {locale: it})}</td>
-                              <td className="px-6 py-4 text-sm text-slate-600 whitespace-nowrap">
+                              <td className="px-4 md:px-6 py-4 text-xs md:text-sm font-bold text-slate-700 whitespace-nowrap">{format(parseISO(entry.date), 'dd MMM yy', {locale: it})}</td>
+                              <td className="px-4 md:px-6 py-4 text-xs md:text-sm text-slate-600 whitespace-nowrap">
                                 <span className="font-bold text-slate-800">{entry.start_time?.substring(0,5)}</span> - <span className="font-bold text-slate-800">{entry.end_time?.substring(0,5)}</span>
-                                <span className="ml-2 text-[10px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded-md font-bold">{entry.hours}h</span>
+                                <span className="ml-1 md:ml-2 text-[9px] md:text-[10px] bg-teal-50 text-teal-700 px-1 md:px-1.5 py-0.5 rounded-md font-bold">{entry.hours}h</span>
                               </td>
-                              <td className="px-6 py-4 text-sm font-bold text-teal-700">{entry.activity_type || 'Generico'}</td>
-                              <td className="px-6 py-4 text-sm text-slate-600 break-words">{entry.notes || '-'}</td>
-                              <td className="px-6 py-4 text-right">
-                                <button onClick={() => handleDeleteTimesheet(entry.id)} className="text-slate-300 hover:text-rose-500 p-2 rounded-lg hover:bg-rose-50 transition-all opacity-0 group-hover:opacity-100" title="Elimina record">
+                              <td className="px-4 md:px-6 py-4 text-xs md:text-sm font-bold text-teal-700 leading-tight">{entry.activity_type || 'Generico'}</td>
+                              <td className="px-4 md:px-6 py-4 text-xs md:text-sm text-slate-600 break-words line-clamp-2 md:line-clamp-none">{entry.notes || '-'}</td>
+                              <td className="px-4 md:px-6 py-4 text-right">
+                                <button onClick={() => handleDeleteTimesheet(entry.id)} className="text-slate-300 hover:text-rose-500 p-1.5 md:p-2 rounded-lg hover:bg-rose-50 transition-all opacity-100 md:opacity-0 md:group-hover:opacity-100">
                                   <Trash2 size={16} />
                                 </button>
                               </td>
@@ -910,107 +921,98 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
 
             {/* SEZIONE DASHBOARD PANORAMICA */}
             {view === 'dashboard' && (
-              <div className="space-y-10">
+              <div className="space-y-6 md:space-y-10">
                 <section>
                   <SectionTitle icon={Users} title="Performance Chat" colorClass="text-blue-600" bgClass="bg-blue-100" />
-                  <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-                    <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <KPICard label="Chat Gestite" current={kpi.curr.chatVol} previous={kpi.prev.chatVol} icon={Target} colorClass="text-blue-500" />
-                      <KPICard label="Attesa Media Storica" current={kpi.curr.chatWait} previous={kpi.prev.chatWait} type="seconds" invert icon={Clock} colorClass="text-blue-500" />
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="col-span-2 grid grid-cols-2 md:grid-cols-2 gap-4">
+                      <KPICard label="Gestite" current={kpi.curr.chatVol} previous={kpi.prev.chatVol} icon={Target} colorClass="text-blue-500" />
+                      <KPICard label="Attesa Media" current={kpi.curr.chatWait} previous={kpi.prev.chatWait} type="seconds" invert icon={Clock} colorClass="text-blue-500" />
                     </div>
-                    <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex flex-col cursor-pointer hover:border-blue-200" onClick={() => setView('chat')}>
-                      <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Trophy size={14} className="text-amber-500"/> Top Operatori (Attivi nel periodo)</h3>
-                      <div className="flex-1 space-y-3">
-                        {insightsChat.leaderboard.length === 0 ? <p className="text-xs text-slate-400">Nessun dato nel periodo selezionato</p> : 
+                    <div className="col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-4 md:p-5 flex flex-col cursor-pointer hover:border-blue-200" onClick={() => setView('chat')}>
+                      <h3 className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3 md:mb-4 flex items-center gap-2"><Trophy size={14} className="text-amber-500"/> Top Operatori (Attivi)</h3>
+                      <div className="flex-1 space-y-2 md:space-y-3">
+                        {insightsChat.leaderboard.length === 0 ? <p className="text-xs text-slate-400">Nessun dato nel periodo</p> : 
                           insightsChat.leaderboard.slice(0,3).map((op, i) => (
                             <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0">
-                              <div><span className="text-sm font-bold text-slate-800">{op.name}</span><div className="text-[10px] text-slate-500 mt-0.5">Risp. {formatSeconds(op.avgWait)} • Durata: {formatTime(op.avgDur/60)}</div></div>
-                              <span className="bg-blue-50 text-blue-700 font-black text-xs px-2 py-1 rounded-md">{op.count} chat</span>
+                              <div className="overflow-hidden mr-2">
+                                <span className="text-xs md:text-sm font-bold text-slate-800 truncate block">{op.name}</span>
+                                <div className="text-[9px] md:text-[10px] text-slate-500 mt-0.5 truncate">Risp: {formatSeconds(op.avgWait)} • Dur: {formatTime(op.avgDur/60)}</div>
+                              </div>
+                              <span className="bg-blue-50 text-blue-700 font-black text-[10px] md:text-xs px-2 py-1 rounded-md shrink-0">{op.count} chat</span>
                             </div>
                           ))}
                       </div>
-                      <div className="mt-3 text-center text-[10px] font-bold text-blue-500 uppercase tracking-wider">Vedi Leaderboard Completa &rarr;</div>
                     </div>
                   </div>
                 </section>
 
                 <section>
                   <SectionTitle icon={GraduationCap} title="Formazione Clienti" colorClass="text-purple-600" bgClass="bg-purple-100" />
-                  <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-                    <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <KPICard label="Sessioni Erogate" current={kpi.curr.formCount} previous={kpi.prev.formCount} icon={GraduationCap} colorClass="text-purple-500" />
-                      <KPICard label="Ore Totali" current={kpi.curr.formMins} previous={kpi.prev.formMins} type="time" icon={Timer} colorClass="text-purple-500" />
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="col-span-2 grid grid-cols-2 md:grid-cols-2 gap-4">
+                      <KPICard label="Sessioni" current={kpi.curr.formCount} previous={kpi.prev.formCount} icon={GraduationCap} colorClass="text-purple-500" />
+                      <KPICard label="Ore Tot." current={kpi.curr.formMins} previous={kpi.prev.formMins} type="time" icon={Timer} colorClass="text-purple-500" />
                     </div>
-                    <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex flex-col cursor-pointer hover:border-purple-200" onClick={() => setView('formazione')}>
-                      <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Tag size={14} className="text-purple-500"/> Classifica Formatori</h3>
-                      <div className="flex-1 space-y-3">
-                        {insightsFormazione.topOps.length === 0 ? <p className="text-xs text-slate-400">Nessun dato nel periodo selezionato</p> : 
+                    <div className="col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-4 md:p-5 flex flex-col cursor-pointer hover:border-purple-200" onClick={() => setView('formazione')}>
+                      <h3 className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3 md:mb-4 flex items-center gap-2"><Tag size={14} className="text-purple-500"/> Classifica Formatori</h3>
+                      <div className="flex-1 space-y-2 md:space-y-3">
+                        {insightsFormazione.topOps.length === 0 ? <p className="text-xs text-slate-400">Nessun dato nel periodo</p> : 
                           insightsFormazione.topOps.slice(0,3).map((op, i) => (
                           <div key={i} className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0">
-                            <span className="text-sm font-bold text-slate-800">{op.name}</span>
-                            <span className="bg-purple-50 text-purple-700 font-black text-xs px-2 py-1 rounded-md">{formatTime(op.mins)} ({op.count} appt)</span>
+                            <span className="text-xs md:text-sm font-bold text-slate-800 truncate mr-2">{op.name}</span>
+                            <span className="bg-purple-50 text-purple-700 font-black text-[10px] md:text-xs px-2 py-1 rounded-md shrink-0">{formatTime(op.mins)} ({op.count})</span>
                           </div>
                         ))}
                       </div>
-                      <div className="mt-3 text-center text-[10px] font-bold text-purple-500 uppercase tracking-wider">Vedi Analisi &rarr;</div>
                     </div>
                   </div>
                 </section>
 
                 <section>
-                  <SectionTitle icon={AlertCircle} title="Supporto Tecnico (Assistenza)" colorClass="text-emerald-600" bgClass="bg-emerald-100" />
-                  <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-                    <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <KPICard label="Ticket Aperti" current={kpi.curr.astIn} previous={kpi.prev.astIn} invert icon={AlertCircle} colorClass="text-emerald-500" />
-                      <KPICard label="Ticket Chiusi" current={kpi.curr.astOut} previous={kpi.prev.astOut} icon={CheckCircle2} colorClass="text-emerald-500" />
-                      <KPICard label="Backlog Attivo" current={kpi.curr.astBacklog} previous={kpi.prev.astBacklog} invert icon={Tag} colorClass="text-emerald-500" />
+                  <SectionTitle icon={AlertCircle} title="Assistenza (Ticket)" colorClass="text-emerald-600" bgClass="bg-emerald-100" />
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="col-span-2 lg:col-span-3 grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <KPICard label="Aperti" current={kpi.curr.astIn} previous={kpi.prev.astIn} invert icon={AlertCircle} colorClass="text-emerald-500" />
+                      <KPICard label="Chiusi" current={kpi.curr.astOut} previous={kpi.prev.astOut} icon={CheckCircle2} colorClass="text-emerald-500" />
+                      <div className="col-span-2 md:col-span-1"><KPICard label="Backlog" current={kpi.curr.astBacklog} previous={kpi.prev.astBacklog} invert icon={Tag} colorClass="text-emerald-500" /></div>
                     </div>
-                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex flex-col cursor-pointer hover:border-emerald-200 transition-all" onClick={() => setView('assistenza')}>
-                      <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Clock size={14} className="text-emerald-500"/> Tempi SLA Assistenza</h3>
-                      <div className="flex-1 space-y-3">
+                    <div className="col-span-2 lg:col-span-1 bg-white rounded-2xl border border-slate-100 shadow-sm p-4 md:p-5 flex flex-col cursor-pointer hover:border-emerald-200 transition-all" onClick={() => setView('assistenza')}>
+                      <h3 className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3 md:mb-4 flex items-center gap-2"><Clock size={14} className="text-emerald-500"/> Tempi SLA</h3>
+                      <div className="flex-1 space-y-2 md:space-y-3">
                         <div className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0">
-                          <span className="text-xs font-bold text-slate-700 truncate pr-2">Prima Risposta</span>
-                          <span className="bg-emerald-50 text-emerald-700 font-black text-xs px-2 py-1 rounded-md">{formatTime(kpi.curr.astSlaFirst)}</span>
+                          <span className="text-[11px] md:text-xs font-bold text-slate-700 truncate pr-2">1° Risposta</span>
+                          <span className="bg-emerald-50 text-emerald-700 font-black text-[10px] md:text-xs px-2 py-1 rounded-md">{formatTime(kpi.curr.astSlaFirst)}</span>
                         </div>
                         <div className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0">
-                          <span className="text-xs font-bold text-slate-700 truncate pr-2">Risp. Successive</span>
-                          <span className="bg-emerald-50 text-emerald-700 font-black text-xs px-2 py-1 rounded-md">{formatTime(kpi.curr.astSlaResp)}</span>
-                        </div>
-                        <div className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0">
-                          <span className="text-xs font-bold text-slate-700 truncate pr-2">Risoluzione</span>
-                          <span className="bg-emerald-50 text-emerald-700 font-black text-xs px-2 py-1 rounded-md">{formatTime(kpi.curr.astSlaRes)}</span>
+                          <span className="text-[11px] md:text-xs font-bold text-slate-700 truncate pr-2">Risoluzione</span>
+                          <span className="bg-emerald-50 text-emerald-700 font-black text-[10px] md:text-xs px-2 py-1 rounded-md">{formatTime(kpi.curr.astSlaRes)}</span>
                         </div>
                       </div>
-                      <div className="mt-3 text-center text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Vai alla Sezione &rarr;</div>
                     </div>
                   </div>
                 </section>
 
                 <section>
-                  <SectionTitle icon={Code} title="Sviluppo & Bug Fixing" colorClass="text-amber-600" bgClass="bg-amber-100" />
-                  <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-                    <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <KPICard label="Segnalazioni Sviluppo" current={kpi.curr.devIn} previous={kpi.prev.devIn} invert icon={Bug} colorClass="text-amber-500" />
-                      <KPICard label="Bug Risolti" current={kpi.curr.devOut} previous={kpi.prev.devOut} icon={Zap} colorClass="text-amber-500" />
-                      <KPICard label="Backlog Tecnico" current={kpi.curr.devBacklog} previous={kpi.prev.devBacklog} invert icon={Tag} colorClass="text-amber-500" />
+                  <SectionTitle icon={Code} title="Sviluppo (Dev/Bug)" colorClass="text-amber-600" bgClass="bg-amber-100" />
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="col-span-2 lg:col-span-3 grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <KPICard label="Segnalati" current={kpi.curr.devIn} previous={kpi.prev.devIn} invert icon={Bug} colorClass="text-amber-500" />
+                      <KPICard label="Risolti" current={kpi.curr.devOut} previous={kpi.prev.devOut} icon={Zap} colorClass="text-amber-500" />
+                      <div className="col-span-2 md:col-span-1"><KPICard label="Backlog" current={kpi.curr.devBacklog} previous={kpi.prev.devBacklog} invert icon={Tag} colorClass="text-amber-500" /></div>
                     </div>
-                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex flex-col cursor-pointer hover:border-amber-200 transition-all" onClick={() => setView('sviluppo')}>
-                      <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Clock size={14} className="text-amber-500"/> Tempi SLA Sviluppo</h3>
-                      <div className="flex-1 space-y-3">
+                    <div className="col-span-2 lg:col-span-1 bg-white rounded-2xl border border-slate-100 shadow-sm p-4 md:p-5 flex flex-col cursor-pointer hover:border-amber-200 transition-all" onClick={() => setView('sviluppo')}>
+                      <h3 className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3 md:mb-4 flex items-center gap-2"><Clock size={14} className="text-amber-500"/> Tempi SLA</h3>
+                      <div className="flex-1 space-y-2 md:space-y-3">
                         <div className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0">
-                          <span className="text-xs font-bold text-slate-700 truncate pr-2">Prima Risposta</span>
-                          <span className="bg-amber-50 text-amber-700 font-black text-xs px-2 py-1 rounded-md">{formatTime(kpi.curr.devSlaFirst)}</span>
+                          <span className="text-[11px] md:text-xs font-bold text-slate-700 truncate pr-2">1° Risposta</span>
+                          <span className="bg-amber-50 text-amber-700 font-black text-[10px] md:text-xs px-2 py-1 rounded-md">{formatTime(kpi.curr.devSlaFirst)}</span>
                         </div>
                         <div className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0">
-                          <span className="text-xs font-bold text-slate-700 truncate pr-2">Risp. Successive</span>
-                          <span className="bg-amber-50 text-amber-700 font-black text-xs px-2 py-1 rounded-md">{formatTime(kpi.curr.devSlaResp)}</span>
-                        </div>
-                        <div className="flex justify-between items-center pb-2 border-b border-slate-50 last:border-0">
-                          <span className="text-xs font-bold text-slate-700 truncate pr-2">Risoluzione</span>
-                          <span className="bg-amber-50 text-amber-700 font-black text-xs px-2 py-1 rounded-md">{formatTime(kpi.curr.devSlaRes)}</span>
+                          <span className="text-[11px] md:text-xs font-bold text-slate-700 truncate pr-2">Risoluzione</span>
+                          <span className="bg-amber-50 text-amber-700 font-black text-[10px] md:text-xs px-2 py-1 rounded-md">{formatTime(kpi.curr.devSlaRes)}</span>
                         </div>
                       </div>
-                      <div className="mt-3 text-center text-[10px] font-bold text-amber-500 uppercase tracking-wider">Vai alla Sezione &rarr;</div>
                     </div>
                   </div>
                 </section>
@@ -1022,7 +1024,8 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
               <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
                 <SectionTitle icon={Users} title="Analisi Operativa Reparto Chat" colorClass="text-blue-600" bgClass="bg-blue-100" />
                 
-                <div className="bg-slate-900 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between shadow-lg mb-6 border border-slate-800">
+                {/* NASCOSTO SU MOBILE: UPLOAD CSV */}
+                <div className="hidden md:flex bg-slate-900 rounded-2xl p-6 flex-col md:flex-row items-center justify-between shadow-lg mb-6 border border-slate-800">
                   <div className="flex items-center gap-4">
                     <div className="bg-blue-500/20 p-3 rounded-xl">{loading ? <RefreshCw size={24} className="text-blue-400 animate-spin"/> : <UploadCloud size={24} className="text-blue-400"/>}</div>
                     <div>
@@ -1041,25 +1044,25 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
                         <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize:10, fill:'#64748b', textTransform:'capitalize'}} interval={timeframe === 'month' ? 'preserveStartEnd' : 0} />
                         <YAxis axisLine={false} tickLine={false} tick={{fontSize:12, fill:'#64748b'}} />
                         <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.1)'}}/>
-                        <Bar dataKey="chatVol" fill="#3b82f6" radius={[4,4,0,0]} name="Chat Gestite" barSize={timeframe === 'month' || timeframe === 'year' ? 12 : 40}/>
+                        <Bar dataKey="chatVol" fill="#3b82f6" radius={[4,4,0,0]} name="Chat Gestite" barSize={timeframe === 'month' || timeframe === 'year' ? 12 : 30}/>
                       </BarChart>
                     </ChartContainer>
                   </div>
 
-                  <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[320px]">
-                    <h3 className="font-bold text-slate-800 mb-4 text-sm uppercase flex items-center gap-2"><Clock size={16} className="text-blue-500"/> Tempi Attesa Iniziale</h3>
+                  <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[320px]">
+                    <h3 className="font-bold text-slate-800 mb-4 text-xs md:text-sm uppercase flex items-center gap-2"><Clock size={16} className="text-blue-500"/> Tempi Attesa</h3>
                     {insightsChat.respData.length === 0 ? <p className="text-xs text-slate-400 text-center mt-10">Nessun dato nel periodo</p> :
                       <div className="flex-1 w-full relative">
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
-                            <Pie data={insightsChat.respData} cx="50%" cy="50%" innerRadius={60} outerRadius={85} paddingAngle={2} dataKey="count" nameKey="bucket">
+                            <Pie data={insightsChat.respData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={2} dataKey="count" nameKey="bucket">
                               {insightsChat.respData.map((entry, index) => {
                                 const c = entry.bucket === '< 30 sec' ? '#10b981' : entry.bucket === '30 - 45 sec' ? '#84cc16' : entry.bucket === '45 - 60 sec' ? '#eab308' : entry.bucket === '60 - 90 sec' ? '#f59e0b' : entry.bucket === '90 - 120 sec' ? '#f97316' : '#ef4444';
                                 return <Cell key={`cell-${index}`} fill={c} />;
                               })}
                             </Pie>
                             <Tooltip contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.1)'}} />
-                            <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '10px'}}/>
+                            <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '9px'}}/>
                           </PieChart>
                         </ResponsiveContainer>
                       </div>
@@ -1068,7 +1071,6 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* MAPPA DI CALORE ORARIA (09:00 - 19:00) */}
                   <ChartContainer title="Mappa di Calore Oraria" isEmpty={insightsChat.heatmapData.every(x => x.picked_up === 0)}>
                     <AreaChart data={insightsChat.heatmapData} margin={{ top: 20, right: 0, left: -20, bottom: 0 }}>
                       <defs>
@@ -1082,42 +1084,40 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
                     </AreaChart>
                   </ChartContainer>
 
-                  {/* PICCHI SETTIMANALI SUL GIORNO */}
-                  <ChartContainer title="Picchi Settimanali sui Giorni" isEmpty={insightsChat.weekDaysData.every(x => x.volume === 0)}>
+                  <ChartContainer title="Picchi sui Giorni" isEmpty={insightsChat.weekDaysData.every(x => x.volume === 0)}>
                     <BarChart data={insightsChat.weekDaysData} margin={{ top: 20, right: 0, left: -20, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize:11, fill:'#64748b'}} />
                       <YAxis axisLine={false} tickLine={false} tick={{fontSize:12, fill:'#64748b'}} />
                       <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.1)'}}/>
-                      <Bar dataKey="volume" fill="#8b5cf6" radius={[4,4,0,0]} name="Volume Chat" barSize={35}/>
+                      <Bar dataKey="volume" fill="#8b5cf6" radius={[4,4,0,0]} name="Volume Chat" barSize={30}/>
                     </BarChart>
                   </ChartContainer>
                 </div>
 
-                {/* TABELLONA OPERATORI ALLARGATA */}
-                <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm w-full">
-                  <h3 className="font-bold text-slate-800 mb-6 text-sm uppercase flex items-center gap-2"><Trophy size={16} className="text-amber-500"/> Leaderboard Operatori</h3>
+                <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-100 shadow-sm w-full">
+                  <h3 className="font-bold text-slate-800 mb-4 md:mb-6 text-xs md:text-sm uppercase flex items-center gap-2"><Trophy size={16} className="text-amber-500"/> Leaderboard</h3>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
+                    <table className="w-full text-left border-collapse min-w-[400px]">
                       <thead>
                         <tr className="border-b border-slate-200">
-                          <th className="pb-3 text-[11px] font-bold text-slate-400 uppercase">Operatore</th>
-                          <th className="pb-3 text-[11px] font-bold text-slate-400 uppercase text-center">Chat Gestite</th>
-                          <th className="pb-3 text-[11px] font-bold text-slate-400 uppercase text-center">Attesa Media</th>
-                          <th className="pb-3 text-[11px] font-bold text-slate-400 uppercase text-right">Durata Media Chat</th>
+                          <th className="pb-3 text-[10px] md:text-[11px] font-bold text-slate-400 uppercase">Operatore</th>
+                          <th className="pb-3 text-[10px] md:text-[11px] font-bold text-slate-400 uppercase text-center">Chat Gestite</th>
+                          <th className="pb-3 text-[10px] md:text-[11px] font-bold text-slate-400 uppercase text-center">Attesa Media</th>
+                          <th className="pb-3 text-[10px] md:text-[11px] font-bold text-slate-400 uppercase text-right">Durata Media</th>
                         </tr>
                       </thead>
                       <tbody>
                         {insightsChat.leaderboard.length === 0 ? <tr><td colSpan="4" className="py-8 text-center text-xs text-slate-400">Nessun dato nel periodo.</td></tr> :
                           insightsChat.leaderboard.map((op, i) => (
                           <tr key={i} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                            <td className="py-4 text-sm font-bold text-slate-800 flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-black text-xs">{op.name.charAt(0)}</div>
-                              {op.name}
+                            <td className="py-3 md:py-4 text-xs md:text-sm font-bold text-slate-800 flex items-center gap-2 md:gap-3">
+                              <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-black text-[10px] md:text-xs">{op.name.charAt(0)}</div>
+                              <span className="truncate max-w-[100px] md:max-w-none">{op.name}</span>
                             </td>
-                            <td className="py-4 text-center"><span className="bg-blue-50 text-blue-700 font-black text-sm px-3 py-1.5 rounded-lg">{op.count}</span></td>
-                            <td className="py-4 text-center text-sm font-bold text-slate-600">{formatSeconds(op.avgWait)}</td>
-                            <td className="py-4 text-right text-sm font-medium text-slate-500">{formatTime(op.avgDur/60)}</td>
+                            <td className="py-3 md:py-4 text-center"><span className="bg-blue-50 text-blue-700 font-black text-xs md:text-sm px-2 md:px-3 py-1 md:py-1.5 rounded-lg">{op.count}</span></td>
+                            <td className="py-3 md:py-4 text-center text-xs md:text-sm font-bold text-slate-600">{formatSeconds(op.avgWait)}</td>
+                            <td className="py-3 md:py-4 text-right text-xs md:text-sm font-medium text-slate-500">{formatTime(op.avgDur/60)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1131,7 +1131,9 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
             {view === 'assistenza' && (
               <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
                 <SectionTitle icon={AlertCircle} title="Analisi Dettagliata Ticket Assistenza" colorClass="text-emerald-600" bgClass="bg-emerald-100" />
-                <div className="bg-slate-900 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between shadow-lg mb-6 border border-slate-800">
+                
+                {/* NASCOSTO SU MOBILE: UPLOAD CSV */}
+                <div className="hidden md:flex bg-slate-900 rounded-2xl p-6 flex-col md:flex-row items-center justify-between shadow-lg mb-6 border border-slate-800">
                   <div className="flex items-center gap-4">
                     <div className="bg-emerald-500/20 p-3 rounded-xl"><UploadCloud size={24} className="text-emerald-400"/></div>
                     <div>
@@ -1144,34 +1146,35 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
                     <input type="file" accept=".csv" className="hidden" onChange={(e) => handleDailyTicketsImport(e, 'zoho_daily_assistenza')} disabled={loading} />
                   </label>
                 </div>
+                
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2">
-                    <ChartContainer title={`Trend Ticket Assistenza (${timeframe === 'year' ? 'Annuale' : timeframe === 'month' ? 'Mensile' : 'Settimanale'})`} isEmpty={trends.every(t => t.astIn === 0 && t.astOut === 0)}>
+                    <ChartContainer title={`Trend Ticket (${timeframe === 'year' ? 'Annuale' : timeframe === 'month' ? 'Mensile' : 'Settimanale'})`} isEmpty={trends.every(t => t.astIn === 0 && t.astOut === 0)}>
                       <BarChart data={trends} margin={{ top: 20, right: 0, left: -20, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                         <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize:10, fill:'#64748b', textTransform:'capitalize'}} interval={timeframe === 'month' ? 'preserveStartEnd' : 0} />
                         <YAxis axisLine={false} tickLine={false} tick={{fontSize:12, fill:'#64748b'}} />
                         <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.1)'}} />
-                        <Legend verticalAlign="top" height={36} iconType="circle"/>
+                        <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{fontSize: '10px'}}/>
                         <Bar dataKey="astIn" fill="#94a3b8" radius={[4,4,0,0]} name="Nuovi Aperti" barSize={timeframe === 'month' || timeframe === 'year' ? 12 : 30}/>
                         <Bar dataKey="astOut" fill="#10b981" radius={[4,4,0,0]} name="Risolti" barSize={timeframe === 'month' || timeframe === 'year' ? 12 : 30}/>
                       </BarChart>
                     </ChartContainer>
                   </div>
-                  <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[320px]">
-                    <h3 className="font-bold text-slate-800 mb-4 flex-shrink-0 text-sm uppercase tracking-wide flex items-center gap-2"><Clock size={16} className="text-emerald-500"/> Tempi SLA & Soddisfazione</h3>
+                  <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[320px]">
+                    <h3 className="font-bold text-slate-800 mb-4 flex-shrink-0 text-xs md:text-sm uppercase tracking-wide flex items-center gap-2"><Clock size={16} className="text-emerald-500"/> SLA & Rating</h3>
                     <div className="flex-1 overflow-auto pr-2 space-y-4">
-                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
-                        <div className="flex justify-between items-center"><p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Prima Risp.</p><p className="text-sm font-black text-slate-800">{formatTime(kpi.curr.astSlaFirst)}</p></div>
-                        <div className="flex justify-between items-center"><p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Risp. Succ.</p><p className="text-sm font-black text-slate-800">{formatTime(kpi.curr.astSlaResp)}</p></div>
-                        <div className="flex justify-between items-center"><p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Risoluzione</p><p className="text-sm font-black text-emerald-600">{formatTime(kpi.curr.astSlaRes)}</p></div>
+                      <div className="p-3 md:p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-2 md:space-y-3">
+                        <div className="flex justify-between items-center"><p className="text-[10px] md:text-[11px] font-bold text-slate-500 uppercase tracking-widest">Prima Risp.</p><p className="text-xs md:text-sm font-black text-slate-800">{formatTime(kpi.curr.astSlaFirst)}</p></div>
+                        <div className="flex justify-between items-center"><p className="text-[10px] md:text-[11px] font-bold text-slate-500 uppercase tracking-widest">Risp. Succ.</p><p className="text-xs md:text-sm font-black text-slate-800">{formatTime(kpi.curr.astSlaResp)}</p></div>
+                        <div className="flex justify-between items-center"><p className="text-[10px] md:text-[11px] font-bold text-slate-500 uppercase tracking-widest">Risoluzione</p><p className="text-xs md:text-sm font-black text-emerald-600">{formatTime(kpi.curr.astSlaRes)}</p></div>
                       </div>
-                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Gradimento Clienti</p>
+                      <div className="p-3 md:p-4 bg-slate-50 rounded-xl border border-slate-100">
+                        <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">Gradimento Clienti</p>
                         <div className="flex items-center justify-between px-1">
-                          <div className="text-center"><span className="block text-emerald-500 font-black text-lg">{insightsTickets.ast.good}</span><span className="text-[10px] text-slate-500 font-bold uppercase">Buono</span></div>
-                          <div className="text-center"><span className="block text-amber-500 font-black text-lg">{insightsTickets.ast.ok}</span><span className="text-[10px] text-slate-500 font-bold uppercase">Medio</span></div>
-                          <div className="text-center"><span className="block text-rose-500 font-black text-lg">{insightsTickets.ast.bad}</span><span className="text-[10px] text-slate-500 font-bold uppercase">Scarso</span></div>
+                          <div className="text-center"><span className="block text-emerald-500 font-black text-base md:text-lg">{insightsTickets.ast.good}</span><span className="text-[9px] md:text-[10px] text-slate-500 font-bold uppercase mt-1 block">Buono</span></div>
+                          <div className="text-center"><span className="block text-amber-500 font-black text-base md:text-lg">{insightsTickets.ast.ok}</span><span className="text-[9px] md:text-[10px] text-slate-500 font-bold uppercase mt-1 block">Medio</span></div>
+                          <div className="text-center"><span className="block text-rose-500 font-black text-base md:text-lg">{insightsTickets.ast.bad}</span><span className="text-[9px] md:text-[10px] text-slate-500 font-bold uppercase mt-1 block">Scarso</span></div>
                         </div>
                       </div>
                     </div>
@@ -1184,7 +1187,9 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
             {view === 'sviluppo' && (
               <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
                 <SectionTitle icon={Code} title="Analisi Dettagliata Sviluppo & Bug" colorClass="text-amber-600" bgClass="bg-amber-100" />
-                <div className="bg-slate-900 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between shadow-lg mb-6 border border-slate-800">
+                
+                {/* NASCOSTO SU MOBILE */}
+                <div className="hidden md:flex bg-slate-900 rounded-2xl p-6 flex-col md:flex-row items-center justify-between shadow-lg mb-6 border border-slate-800">
                   <div className="flex items-center gap-4">
                     <div className="bg-amber-500/20 p-3 rounded-xl"><UploadCloud size={24} className="text-amber-400"/></div>
                     <div>
@@ -1197,30 +1202,31 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
                     <input type="file" accept=".csv" className="hidden" onChange={(e) => handleDailyTicketsImport(e, 'zoho_daily_sviluppo')} disabled={loading} />
                   </label>
                 </div>
+                
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2">
-                    <ChartContainer title={`Trend Ticket Sviluppo (${timeframe === 'year' ? 'Annuale' : timeframe === 'month' ? 'Mensile' : 'Settimanale'})`} isEmpty={trends.every(t => t.devIn === 0 && t.devOut === 0)}>
+                    <ChartContainer title={`Trend Ticket (${timeframe === 'year' ? 'Annuale' : timeframe === 'month' ? 'Mensile' : 'Settimanale'})`} isEmpty={trends.every(t => t.devIn === 0 && t.devOut === 0)}>
                       <BarChart data={trends} margin={{ top: 20, right: 0, left: -20, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                         <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize:10, fill:'#64748b', textTransform:'capitalize'}} interval={timeframe === 'month' ? 'preserveStartEnd' : 0} />
                         <YAxis axisLine={false} tickLine={false} tick={{fontSize:12, fill:'#64748b'}} />
                         <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.1)'}} />
-                        <Legend verticalAlign="top" height={36} iconType="circle"/>
+                        <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{fontSize:'10px'}}/>
                         <Bar dataKey="devIn" fill="#94a3b8" radius={[4,4,0,0]} name="Nuovi Segnalati" barSize={timeframe === 'month' || timeframe === 'year' ? 12 : 30}/>
                         <Bar dataKey="devOut" fill="#f59e0b" radius={[4,4,0,0]} name="Bug Corretti" barSize={timeframe === 'month' || timeframe === 'year' ? 12 : 30}/>
                       </BarChart>
                     </ChartContainer>
                   </div>
-                  <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[320px]">
-                    <h3 className="font-bold text-slate-800 mb-4 flex-shrink-0 text-sm uppercase tracking-wide flex items-center gap-2"><Clock size={16} className="text-amber-500"/> Tempi SLA & Attese</h3>
+                  <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[320px]">
+                    <h3 className="font-bold text-slate-800 mb-4 flex-shrink-0 text-xs md:text-sm uppercase tracking-wide flex items-center gap-2"><Clock size={16} className="text-amber-500"/> Tempi SLA & Attese</h3>
                     <div className="flex-1 overflow-auto pr-2 space-y-4">
-                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
-                        <div className="flex justify-between items-center"><p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Prima Risp.</p><p className="text-sm font-black text-slate-800">{formatTime(kpi.curr.devSlaFirst)}</p></div>
-                        <div className="flex justify-between items-center"><p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Risp. Succ.</p><p className="text-sm font-black text-slate-800">{formatTime(kpi.curr.devSlaResp)}</p></div>
-                        <div className="flex justify-between items-center"><p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Risoluzione</p><p className="text-sm font-black text-amber-600">{formatTime(kpi.curr.devSlaRes)}</p></div>
+                      <div className="p-3 md:p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-2 md:space-y-3">
+                        <div className="flex justify-between items-center"><p className="text-[10px] md:text-[11px] font-bold text-slate-500 uppercase tracking-widest">Prima Risp.</p><p className="text-xs md:text-sm font-black text-slate-800">{formatTime(kpi.curr.devSlaFirst)}</p></div>
+                        <div className="flex justify-between items-center"><p className="text-[10px] md:text-[11px] font-bold text-slate-500 uppercase tracking-widest">Risp. Succ.</p><p className="text-xs md:text-sm font-black text-slate-800">{formatTime(kpi.curr.devSlaResp)}</p></div>
+                        <div className="flex justify-between items-center"><p className="text-[10px] md:text-[11px] font-bold text-slate-500 uppercase tracking-widest">Risoluzione</p><p className="text-xs md:text-sm font-black text-amber-600">{formatTime(kpi.curr.devSlaRes)}</p></div>
                       </div>
-                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                        <div className="flex justify-between items-center"><p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Ticket Sospesi / Attesa</p><p className="text-xl font-black text-amber-500">{insightsTickets.dev.waitAvg} in media</p></div>
+                      <div className="p-3 md:p-4 bg-slate-50 rounded-xl border border-slate-100">
+                        <div className="flex justify-between items-center"><p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-widest">Ticket Sospesi / Attesa</p><p className="text-lg md:text-xl font-black text-amber-500">{insightsTickets.dev.waitAvg} in media</p></div>
                       </div>
                     </div>
                   </div>
@@ -1233,7 +1239,8 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
               <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
                 <SectionTitle icon={GraduationCap} title="Analisi Dettagliata Formazione" colorClass="text-purple-600" bgClass="bg-purple-100" />
                 
-                <div className="bg-slate-900 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between shadow-lg mb-6 border border-slate-800">
+                {/* NASCOSTO SU MOBILE */}
+                <div className="hidden md:flex bg-slate-900 rounded-2xl p-6 flex-col md:flex-row items-center justify-between shadow-lg mb-6 border border-slate-800">
                   <div className="flex items-center gap-4">
                     <div className="bg-purple-500/20 p-3 rounded-xl"><UploadCloud size={24} className="text-purple-400"/></div>
                     <div>
@@ -1248,52 +1255,52 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[320px]">
-                    <h3 className="font-bold text-slate-800 mb-4 text-sm uppercase flex items-center gap-2"><Activity size={16} className="text-purple-500"/> Macro-Argomenti (IA)</h3>
+                  <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[320px]">
+                    <h3 className="font-bold text-slate-800 mb-4 text-xs md:text-sm uppercase flex items-center gap-2"><Activity size={16} className="text-purple-500"/> Macro-Argomenti (IA)</h3>
                     {insightsFormazione.topTopics.length === 0 ? <p className="text-xs text-slate-400 text-center mt-10">Nessun dato</p> :
                     <div className="flex-1 w-full relative">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                          <Pie data={insightsFormazione.topTopics} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="count" nameKey="name">
+                          <Pie data={insightsFormazione.topTopics} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3} dataKey="count" nameKey="name">
                             {insightsFormazione.topTopics.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
                           </Pie>
                           <Tooltip contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.1)'}} />
-                          <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize:'10px'}}/>
+                          <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize:'9px'}}/>
                         </PieChart>
                       </ResponsiveContainer>
                     </div>}
                   </div>
 
-                  <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[320px]">
-                    <h3 className="font-bold text-slate-800 mb-4 text-sm uppercase flex items-center gap-2"><Building size={16} className="text-rose-500"/> Top Aziende Assistite</h3>
+                  <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[320px]">
+                    <h3 className="font-bold text-slate-800 mb-4 text-xs md:text-sm uppercase flex items-center gap-2"><Building size={16} className="text-rose-500"/> Top Aziende</h3>
                     <div className="flex-1 overflow-auto pr-2 space-y-2">
                       {insightsFormazione.topComps.length === 0 ? <p className="text-xs text-slate-400 text-center mt-10">Nessun dato presente</p> :
                         insightsFormazione.topComps.map((comp, i) => (
-                        <div key={i} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <div key={i} className="flex justify-between items-center p-2.5 md:p-3 bg-slate-50 rounded-xl border border-slate-100">
                           <div className="overflow-hidden mr-3">
-                            <p className="text-xs font-bold text-slate-800 truncate" title={comp.cleanName}>{comp.cleanName}</p>
-                            <p className="text-[10px] font-medium text-slate-500 mt-0.5">{comp.count} sessioni</p>
+                            <p className="text-[11px] md:text-xs font-bold text-slate-800 truncate" title={comp.cleanName}>{comp.cleanName}</p>
+                            <p className="text-[9px] md:text-[10px] font-medium text-slate-500 mt-0.5">{comp.count} sessioni</p>
                           </div>
                           <div className="text-right whitespace-nowrap">
-                            <p className="text-sm font-black text-rose-600">{formatTime(comp.mins)}</p>
+                            <p className="text-xs md:text-sm font-black text-rose-600">{formatTime(comp.mins)}</p>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[320px]">
-                    <h3 className="font-bold text-slate-800 mb-4 text-sm uppercase flex items-center gap-2"><Trophy size={16} className="text-blue-500"/> Classifica Formatori</h3>
+                  <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[320px]">
+                    <h3 className="font-bold text-slate-800 mb-4 text-xs md:text-sm uppercase flex items-center gap-2"><Trophy size={16} className="text-blue-500"/> Classifica Formatori</h3>
                     <div className="flex-1 overflow-auto pr-2 space-y-2">
                       {insightsFormazione.topOps.length === 0 ? <p className="text-xs text-slate-400 text-center mt-10">Nessun dato presente</p> :
                         insightsFormazione.topOps.map((op, i) => (
-                        <div key={i} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
-                          <div>
-                            <p className="text-sm font-bold text-slate-800">{op.name}</p>
-                            <p className="text-[10px] font-medium text-slate-500 mt-0.5">{op.count} appuntamenti</p>
+                        <div key={i} className="flex justify-between items-center p-2.5 md:p-3 bg-slate-50 rounded-xl border border-slate-100">
+                          <div className="overflow-hidden mr-3">
+                            <p className="text-xs md:text-sm font-bold text-slate-800 truncate">{op.name}</p>
+                            <p className="text-[9px] md:text-[10px] font-medium text-slate-500 mt-0.5">{op.count} appuntamenti</p>
                           </div>
-                          <div className="text-right">
-                            <p className="text-sm font-black text-blue-600">{formatTime(op.mins)}</p>
+                          <div className="text-right whitespace-nowrap">
+                            <p className="text-xs md:text-sm font-black text-blue-600">{formatTime(op.mins)}</p>
                           </div>
                         </div>
                       ))}
@@ -1305,6 +1312,23 @@ Il reparto Assistenza ha ricevuto ${kpi.curr.astIn} nuovi ticket, chiudendone ${
             
           </div>
         </main>
+        
+        {/* MOBILE BOTTOM NAVIGATION */}
+        <nav className="md:hidden fixed bottom-0 left-0 w-full bg-white/95 backdrop-blur-md border-t border-slate-200 z-50 flex justify-around items-center px-1 py-2 pb-safe">
+          {[ 
+            { id: 'dashboard', icon: LayoutDashboard, label: 'Home' }, 
+            { id: 'chat', icon: Users, label: 'Chat' }, 
+            { id: 'formazione', icon: GraduationCap, label: 'Formaz.' },
+            { id: 'assistenza', icon: AlertCircle, label: 'Ticket' }, 
+            { id: 'sviluppo', icon: Code, label: 'Sviluppo' },
+            { id: 'timesheet', icon: CalendarDays, label: 'Attività' }
+          ].map(item => (
+            <button key={item.id} onClick={() => setView(item.id)} className={`flex flex-col items-center justify-center p-2 min-w-[56px] rounded-xl transition-all ${view === item.id ? 'text-blue-600 bg-blue-50/50' : 'text-slate-400 hover:text-slate-600'}`}>
+              <item.icon size={20} strokeWidth={view === item.id ? 2.5 : 2} />
+              <span className={`text-[9px] mt-1 tracking-wide ${view === item.id ? 'font-bold' : 'font-medium'}`}>{item.label}</span>
+            </button>
+          ))}
+        </nav>
       </div>
     </div>
   );
