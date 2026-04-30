@@ -24,7 +24,6 @@ Deno.serve(async (req) => {
     const code = url.searchParams.get("code");
     const errorParam = url.searchParams.get("error");
 
-    // Caso: l'utente ha cliccato "Rifiuta" su Zoho
     if (errorParam) {
       return htmlResponse(
         false,
@@ -39,7 +38,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 2. Leggi le configurazioni dalle env var
     const clientId = Deno.env.get("ZOHO_CLIENT_ID");
     const clientSecret = Deno.env.get("ZOHO_CLIENT_SECRET");
     const redirectUri = Deno.env.get("ZOHO_REDIRECT_URI");
@@ -55,7 +53,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 3. Scambia il code con il refresh token
     const params = new URLSearchParams({
       grant_type: "authorization_code",
       client_id: clientId,
@@ -82,12 +79,10 @@ Deno.serve(async (req) => {
         false,
         "Zoho ha risposto con access_token ma SENZA refresh_token. " +
           "Probabilmente l'app è già stata autorizzata in passato. " +
-          "Soluzione: revoca l'autorizzazione su accounts.zoho.eu/home#sessions/userauthtoken " +
-          "e riautorizza.",
+          "Soluzione: revoca l'autorizzazione su accounts.zoho.eu/home#sessions/userauthtoken e riautorizza.",
       );
     }
 
-    // 4. Salva (upsert) nella tabella zoho_credentials, riga 'global'
     const { error } = await supabaseAdmin
       .from("zoho_credentials")
       .upsert(
@@ -109,7 +104,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 5. Successo
     return htmlResponse(
       true,
       "Refresh token salvato correttamente. Da ora la dashboard può sincronizzare i dati Zoho.",
@@ -119,10 +113,6 @@ Deno.serve(async (req) => {
   }
 });
 
-/**
- * Genera una pagina HTML semplice per dare un feedback visivo all'utente
- * dopo il redirect da Zoho.
- */
 function htmlResponse(success: boolean, message: string): Response {
   const title = success ? "✅ Autorizzazione completata" : "❌ Errore";
   const color = success ? "#16a34a" : "#dc2626";
@@ -154,4 +144,4 @@ function htmlResponse(success: boolean, message: string): Response {
     status: success ? 200 : 400,
     headers: { ...corsHeaders, "Content-Type": "text/html; charset=utf-8" },
   });
-});
+}
