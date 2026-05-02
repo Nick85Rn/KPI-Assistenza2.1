@@ -12,7 +12,7 @@ import { useDashboardData } from "./hooks/useDashboardData";
 import { useSyncStatus } from "./hooks/useSyncStatus";
 import { periodBounds, previousPeriod, yoyPeriod, formatPeriodLabel } from "./lib/periods";
 import { formatRelative } from "./lib/format";
-import { Construction, Database } from "lucide-react";
+import { Construction } from "lucide-react";
 
 export default function App() {
   // Stato globale dell'app: pagina attiva + periodo selezionato
@@ -53,7 +53,7 @@ export default function App() {
                 Periodo: <span className="font-medium text-slate-700">
                   {formatPeriodLabel(period.type, period.anchor)}
                 </span>
-                {data.lastSync && Object.keys(data.lastSync).length > 0 && (
+                {data?.lastSync && Object.keys(data.lastSync).length > 0 && (
                   <span className="ml-3 text-slate-400">
                     · Ultima sincronizzazione: {getMostRecentSync(data.lastSync)}
                   </span>
@@ -93,7 +93,6 @@ export default function App() {
 
 /**
  * Smista la pagina attiva al componente corretto.
- * Per le sezioni non ancora implementate, mostra un placeholder.
  */
 function PageContent({ activePage, data }) {
   switch (activePage) {
@@ -113,7 +112,6 @@ function PageContent({ activePage, data }) {
 
 /**
  * Placeholder per le sezioni in costruzione.
- * Verrà sostituito con i veri componenti pagine nelle prossime sessioni.
  */
 function Placeholder({ pageKey }) {
   const item = NAV_ITEMS.find((n) => n.key === pageKey);
@@ -139,6 +137,7 @@ function Placeholder({ pageKey }) {
  * Restituisce la più recente data di sync formattata come "2 minuti fa".
  */
 function getMostRecentSync(lastSyncByPart) {
+  if (!lastSyncByPart || typeof lastSyncByPart !== "object") return "—";
   let mostRecent = null;
   for (const v of Object.values(lastSyncByPart)) {
     if (!v?.finished_at) continue;
