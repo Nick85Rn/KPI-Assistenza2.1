@@ -16,6 +16,10 @@ export default function SyncButton({ statuses, sources, running, lastRunAt, onCl
   const [open, setOpen] = useState(false);
   const popoverRef = useRef(null);
 
+  // Fallback sicuri: nei primissimi render statuses/sources potrebbero essere undefined
+  const safeStatuses = statuses ?? {};
+  const safeSources = Array.isArray(sources) ? sources : [];
+
   // Chiude il popover cliccando fuori
   useEffect(() => {
     if (!open) return;
@@ -27,9 +31,10 @@ export default function SyncButton({ statuses, sources, running, lastRunAt, onCl
   }, [open]);
 
   // Calcola lo stato globale per il colore del pulsante
-  const allDone = !running && lastRunAt &&
-    Object.values(statuses).every((s) => s.state === "success" || s.state === "idle");
-  const hasError = Object.values(statuses).some((s) => s.state === "error");
+  const statusValues = Object.values(safeStatuses);
+  const allDone = !running && lastRunAt && statusValues.length > 0 &&
+    statusValues.every((s) => s?.state === "success" || s?.state === "idle");
+  const hasError = statusValues.some((s) => s?.state === "error");
 
   return (
     <div className="relative" ref={popoverRef}>
@@ -65,8 +70,8 @@ export default function SyncButton({ statuses, sources, running, lastRunAt, onCl
             )}
           </div>
           <ul className="p-2">
-            {sources.map((src) => {
-              const s = statuses[src.key] ?? { state: "idle", message: "" };
+            {safeSources.map((src) => {
+              const s = safeStatuses[src.key] ?? { state: "idle", message: "" };
               return (
                 <li key={src.key} className="flex items-start gap-3 px-2 py-2 rounded hover:bg-slate-50">
                   <div className="mt-0.5"><StatusIcon state={s.state} /></div>
