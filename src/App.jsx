@@ -1,8 +1,7 @@
 // src/App.jsx
-// Punto di ingresso della Dashboard 2.0.
-// Orchestra: sidebar, selettore periodo, pulsante sync, render pagina attiva.
+// Punto di ingresso della Dashboard 2.0 — versione robusta con ErrorBoundary.
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, Component } from "react";
 import Sidebar, { NAV_ITEMS } from "./components/Sidebar";
 import TimeframeSelector from "./components/TimeframeSelector";
 import SyncButton from "./components/SyncButton";
@@ -12,14 +11,69 @@ import { useDashboardData } from "./hooks/useDashboardData";
 import { useSyncStatus } from "./hooks/useSyncStatus";
 import { periodBounds, previousPeriod, yoyPeriod, formatPeriodLabel } from "./lib/periods";
 import { formatRelative } from "./lib/format";
-import { Construction } from "lucide-react";
+import { Construction, AlertTriangle } from "lucide-react";
 
-export default function App() {
-  // Stato globale dell'app: pagina attiva + periodo selezionato
+// =========================================================
+// ERROR BOUNDARY: cattura qualsiasi crash e mostra info utili
+// =========================================================
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, info: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error("ErrorBoundary catch:", error, info);
+    this.setState({ info });
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+          <div className="max-w-2xl w-full bg-white border border-red-200 rounded-lg p-8 shadow-sm">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 rounded-full bg-red-100 text-red-600">
+                <AlertTriangle size={22} />
+              </div>
+              <h1 className="text-xl font-bold text-slate-900">Errore nella dashboard</h1>
+            </div>
+            <p className="text-slate-700 mb-4">
+              C'è stato un errore JavaScript a runtime. Dettagli sotto:
+            </p>
+            <pre className="bg-slate-50 border border-slate-200 rounded p-4 text-xs text-red-700 overflow-auto whitespace-pre-wrap break-all">
+              {String(this.state.error?.stack || this.state.error?.message || this.state.error)}
+            </pre>
+            {this.state.info?.componentStack && (
+              <details className="mt-4">
+                <summary className="text-sm text-slate-600 cursor-pointer">Stack componenti</summary>
+                <pre className="mt-2 bg-slate-50 border border-slate-200 rounded p-3 text-xs text-slate-600 overflow-auto whitespace-pre-wrap">
+                  {this.state.info.componentStack}
+                </pre>
+              </details>
+            )}
+            <button
+              onClick={() => location.reload()}
+              className="mt-4 px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800"
+            >
+              Ricarica pagina
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// =========================================================
+// APP PRINCIPALE
+// =========================================================
+function AppInner() {
   const [activePage, setActivePage] = useState("cruscotto");
   const [period, setPeriod] = useState({ type: "month", anchor: new Date() });
 
-  // Calcola i bounds dei 3 periodi (current, previous, yoy)
   const ranges = useMemo(() => {
     const cur = periodBounds(period.type, period.anchor);
     const prev = previousPeriod(period.type, period.anchor);
@@ -31,18 +85,20 @@ export default function App() {
     };
   }, [period.type, period.anchor.getTime()]);
 
-  // Hook unificato per i dati
-  const data = useDashboardData(ranges);
+  const data = useDashboardData(ranges) ?? {};
+  const sync = useSyncStatus() ?? {};
 
-  // Hook per il pulsante sync (collegato al refresh dati)
-  const sync = useSyncStatus();
+  // Sicurezze multiple
+  const lastSync = data.lastSync && typeof data.lastSync === "object" ? data.lastSync : {};
+  const hasSyncInfo = Object.keys(lastSync).length > 0;
+  const syncStatuses = sync.statuses && typeof sync.statuses === "object" ? sync.statuses : {};
+  const syncSources = Array.isArray(sync.sources) ? sync.sources : [];
 
   return (
     <div className="min-h-screen flex bg-slate-50 text-slate-900">
       <Sidebar active={activePage} onChange={setActivePage} />
 
       <main className="flex-1 min-w-0 flex flex-col">
-        {/* Header sticky in alto */}
         <header className="sticky top-0 z-20 bg-white border-b border-slate-200 px-8 py-4">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
@@ -53,9 +109,9 @@ export default function App() {
                 Periodo: <span className="font-medium text-slate-700">
                   {formatPeriodLabel(period.type, period.anchor)}
                 </span>
-                {data?.lastSync && Object.keys(data.lastSync).length > 0 && (
+                {hasSyncInfo && (
                   <span className="ml-3 text-slate-400">
-                    · Ultima sincronizzazione: {getMostRecentSync(data.lastSync)}
+                    · Ultima sincronizzazione: {getMostRecentSync(lastSync)}
                   </span>
                 )}
               </div>
@@ -68,17 +124,16 @@ export default function App() {
                 onChange={setPeriod}
               />
               <SyncButton
-                statuses={sync.statuses}
-                sources={sync.sources}
-                running={sync.running}
-                lastRunAt={sync.lastRunAt}
-                onClick={() => sync.runSync(data.refresh)}
+                statuses={syncStatuses}
+                sources={syncSources}
+                running={!!sync.running}
+                lastRunAt={sync.lastRunAt ?? null}
+                onClick={() => sync.runSync?.(data.refresh)}
               />
             </div>
           </div>
         </header>
 
-        {/* Contenuto pagina */}
         <div className="flex-1 px-8 py-6">
           {data.loading && !data.current ? (
             <Loading size="lg" label="Caricamento dati Zoho..." />
@@ -91,28 +146,15 @@ export default function App() {
   );
 }
 
-/**
- * Smista la pagina attiva al componente corretto.
- */
 function PageContent({ activePage, data }) {
   switch (activePage) {
     case "cruscotto":
       return <Cruscotto data={data} />;
-    case "chat":
-    case "formazione":
-    case "assistenza":
-    case "sviluppo":
-    case "report":
-    case "timesheet":
-      return <Placeholder pageKey={activePage} />;
     default:
       return <Placeholder pageKey={activePage} />;
   }
 }
 
-/**
- * Placeholder per le sezioni in costruzione.
- */
 function Placeholder({ pageKey }) {
   const item = NAV_ITEMS.find((n) => n.key === pageKey);
   return (
@@ -133,9 +175,6 @@ function Placeholder({ pageKey }) {
   );
 }
 
-/**
- * Restituisce la più recente data di sync formattata come "2 minuti fa".
- */
 function getMostRecentSync(lastSyncByPart) {
   if (!lastSyncByPart || typeof lastSyncByPart !== "object") return "—";
   let mostRecent = null;
@@ -147,4 +186,13 @@ function getMostRecentSync(lastSyncByPart) {
     }
   }
   return mostRecent ? formatRelative(mostRecent.iso) : "—";
+}
+
+// Esporto wrappato in ErrorBoundary
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppInner />
+    </ErrorBoundary>
+  );
 }
