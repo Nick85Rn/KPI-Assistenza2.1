@@ -1,13 +1,15 @@
-// src/App.jsx — VERSIONE TEST DEFINITIVO
+// src/App.jsx — versione produzione
 
 import { useState, useMemo, Component } from "react";
 import Sidebar, { NAV_ITEMS } from "./components/Sidebar";
 import TimeframeSelector from "./components/TimeframeSelector";
 import SyncButton from "./components/SyncButton";
+import Loading from "./components/Loading";
+import Cruscotto from "./pages/Cruscotto";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { useSyncStatus } from "./hooks/useSyncStatus";
 import { periodBounds, previousPeriod, yoyPeriod, formatPeriodLabel } from "./lib/periods";
-import { AlertTriangle } from "lucide-react";
+import { Construction, AlertTriangle } from "lucide-react";
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -103,28 +105,32 @@ function AppInner() {
         </header>
 
         <div className="flex-1 px-8 py-6">
-          <div className="bg-white border border-slate-200 rounded-lg p-12 text-center">
-            <h2 className="text-xl font-bold text-slate-900 mb-4">
-              Pagina di test (vuota)
-            </h2>
-            <p className="text-slate-600 mb-6">
-              Se vedi questo riquadro, l'header funziona. 
-              Il bug è solo nel rendering della pagina contenuto.
-            </p>
-            
-            <div className="text-left bg-slate-50 border rounded p-4 text-xs space-y-1 max-w-md mx-auto">
-              <div><strong>data.loading:</strong> {String(data.loading)}</div>
-              <div><strong>data.error:</strong> {data.error ? String(data.error) : "null"}</div>
-              <div><strong>data.current esiste:</strong> {String(!!data.current)}</div>
-              <div><strong>data.previous esiste:</strong> {String(!!data.previous)}</div>
-              <div><strong>data.yoy esiste:</strong> {String(!!data.yoy)}</div>
-              <div><strong>data.lastSync esiste:</strong> {String(!!data.lastSync)}</div>
-              <div><strong>sync.statuses esiste:</strong> {String(!!sync.statuses)}</div>
-              <div><strong>sync.sources esiste:</strong> {String(!!sync.sources)}</div>
-            </div>
-          </div>
+          <ErrorBoundary>
+            {activePage === "cruscotto" ? (
+              data.loading && !data.current ? (
+                <Loading size="lg" label="Caricamento dati Zoho..." />
+              ) : (
+                <Cruscotto data={data} />
+              )
+            ) : (
+              <Placeholder pageKey={activePage} />
+            )}
+          </ErrorBoundary>
         </div>
       </main>
+    </div>
+  );
+}
+
+function Placeholder({ pageKey }) {
+  const item = NAV_ITEMS.find((n) => n.key === pageKey);
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-12 text-center">
+      <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-amber-100 text-amber-700 mb-4">
+        <Construction size={26} />
+      </div>
+      <h2 className="text-xl font-bold mb-2">{item?.label ?? pageKey}</h2>
+      <p className="text-slate-600">Sezione in costruzione.</p>
     </div>
   );
 }
