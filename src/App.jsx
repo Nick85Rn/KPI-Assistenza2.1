@@ -1,198 +1,166 @@
-// src/App.jsx
-// Punto di ingresso della Dashboard 2.0 — versione robusta con ErrorBoundary.
+// src/App.jsx — versione stabile minimal: parte SENZA hooks per isolare il bug
 
-import { useState, useMemo, Component } from "react";
-import Sidebar, { NAV_ITEMS } from "./components/Sidebar";
-import TimeframeSelector from "./components/TimeframeSelector";
-import SyncButton from "./components/SyncButton";
-import Loading from "./components/Loading";
-import Cruscotto from "./pages/Cruscotto";
-import { useDashboardData } from "./hooks/useDashboardData";
-import { useSyncStatus } from "./hooks/useSyncStatus";
-import { periodBounds, previousPeriod, yoyPeriod, formatPeriodLabel } from "./lib/periods";
-import { formatRelative } from "./lib/format";
-import { Construction, AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import { Database, CheckCircle2, AlertCircle } from "lucide-react";
 
-// =========================================================
-// ERROR BOUNDARY: cattura qualsiasi crash e mostra info utili
-// =========================================================
-class ErrorBoundary extends Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, error: null, info: null };
-  }
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
-  componentDidCatch(error, info) {
-    console.error("ErrorBoundary catch:", error, info);
-    this.setState({ info });
-  }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-          <div className="max-w-2xl w-full bg-white border border-red-200 rounded-lg p-8 shadow-sm">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 rounded-full bg-red-100 text-red-600">
-                <AlertTriangle size={22} />
-              </div>
-              <h1 className="text-xl font-bold text-slate-900">Errore nella dashboard</h1>
-            </div>
-            <p className="text-slate-700 mb-4">
-              C'è stato un errore JavaScript a runtime. Dettagli sotto:
-            </p>
-            <pre className="bg-slate-50 border border-slate-200 rounded p-4 text-xs text-red-700 overflow-auto whitespace-pre-wrap break-all">
-              {String(this.state.error?.stack || this.state.error?.message || this.state.error)}
-            </pre>
-            {this.state.info?.componentStack && (
-              <details className="mt-4">
-                <summary className="text-sm text-slate-600 cursor-pointer">Stack componenti</summary>
-                <pre className="mt-2 bg-slate-50 border border-slate-200 rounded p-3 text-xs text-slate-600 overflow-auto whitespace-pre-wrap">
-                  {this.state.info.componentStack}
-                </pre>
-              </details>
-            )}
-            <button
-              onClick={() => location.reload()}
-              className="mt-4 px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800"
-            >
-              Ricarica pagina
-            </button>
-          </div>
-        </div>
-      );
+export default function App() {
+  const [tested, setTested] = useState({});
+  const [errors, setErrors] = useState({});
+
+  const test = async (name, fn) => {
+    try {
+      const result = await fn();
+      setTested((t) => ({ ...t, [name]: result }));
+      setErrors((e) => ({ ...e, [name]: null }));
+    } catch (err) {
+      setTested((t) => ({ ...t, [name]: null }));
+      setErrors((e) => ({ ...e, [name]: err?.stack || err?.message || String(err) }));
     }
-    return this.props.children;
-  }
-}
+  };
 
-// =========================================================
-// APP PRINCIPALE
-// =========================================================
-function AppInner() {
-  const [activePage, setActivePage] = useState("cruscotto");
-  const [period, setPeriod] = useState({ type: "month", anchor: new Date() });
-
-  const ranges = useMemo(() => {
-    const cur = periodBounds(period.type, period.anchor);
-    const prev = previousPeriod(period.type, period.anchor);
-    const yoy = yoyPeriod(period.type, period.anchor);
-    return {
-      start: cur.start,    end: cur.end,
-      prevStart: prev.start, prevEnd: prev.end,
-      yoyStart: yoy.start,   yoyEnd: yoy.end,
-    };
-  }, [period.type, period.anchor.getTime()]);
-
-  const data = useDashboardData(ranges) ?? {};
-  const sync = useSyncStatus() ?? {};
-
-  // Sicurezze multiple
-  const lastSync = data.lastSync && typeof data.lastSync === "object" ? data.lastSync : {};
-  const hasSyncInfo = Object.keys(lastSync).length > 0;
-  const syncStatuses = sync.statuses && typeof sync.statuses === "object" ? sync.statuses : {};
-  const syncSources = Array.isArray(sync.sources) ? sync.sources : [];
+  const tests = [
+    {
+      name: "1. supabaseClient",
+      fn: async () => {
+        const mod = await import("./supabaseClient");
+        return `OK: client = ${typeof mod.supabase}`;
+      },
+    },
+    {
+      name: "2. lib/format",
+      fn: async () => {
+        const m = await import("./lib/format");
+        return `OK: ${Object.keys(m).join(", ")}`;
+      },
+    },
+    {
+      name: "3. lib/periods",
+      fn: async () => {
+        const m = await import("./lib/periods");
+        const b = m.periodBounds("month", new Date());
+        return `OK: bounds = ${b.start.toISOString().slice(0,10)} → ${b.end.toISOString().slice(0,10)}`;
+      },
+    },
+    {
+      name: "4. api/zohoData",
+      fn: async () => {
+        const m = await import("./api/zohoData");
+        return `OK: ${Object.keys(m).join(", ")}`;
+      },
+    },
+    {
+      name: "5. hooks/useSyncStatus (solo import)",
+      fn: async () => {
+        const m = await import("./hooks/useSyncStatus");
+        return `OK: ${typeof m.useSyncStatus}`;
+      },
+    },
+    {
+      name: "6. hooks/useDashboardData (solo import)",
+      fn: async () => {
+        const m = await import("./hooks/useDashboardData");
+        return `OK: ${typeof m.useDashboardData}`;
+      },
+    },
+    {
+      name: "7. components/Sidebar (solo import)",
+      fn: async () => {
+        const m = await import("./components/Sidebar");
+        return `OK: NAV_ITEMS=${m.NAV_ITEMS?.length} voci`;
+      },
+    },
+    {
+      name: "8. components/SyncButton (solo import)",
+      fn: async () => {
+        const m = await import("./components/SyncButton");
+        return `OK: default = ${typeof m.default}`;
+      },
+    },
+    {
+      name: "9. components/TimeframeSelector (solo import)",
+      fn: async () => {
+        const m = await import("./components/TimeframeSelector");
+        return `OK: default = ${typeof m.default}`;
+      },
+    },
+    {
+      name: "10. components/KPICard (solo import)",
+      fn: async () => {
+        const m = await import("./components/KPICard");
+        return `OK: default = ${typeof m.default}`;
+      },
+    },
+    {
+      name: "11. pages/Cruscotto (solo import)",
+      fn: async () => {
+        const m = await import("./pages/Cruscotto");
+        return `OK: default = ${typeof m.default}`;
+      },
+    },
+    {
+      name: "12. Query Supabase: getLastSyncByPart",
+      fn: async () => {
+        const m = await import("./api/zohoData");
+        const r = await m.getLastSyncByPart();
+        return `OK: ${Object.keys(r ?? {}).length} fonti, valore = ${JSON.stringify(r).slice(0,200)}`;
+      },
+    },
+    {
+      name: "13. Query Supabase: getChatKpis",
+      fn: async () => {
+        const m = await import("./api/zohoData");
+        const r = await m.getChatKpis({ start: new Date("2026-04-01"), end: new Date("2026-04-30") });
+        return `OK: ${r?.chats_total ?? 0} chat totali`;
+      },
+    },
+  ];
 
   return (
-    <div className="min-h-screen flex bg-slate-50 text-slate-900">
-      <Sidebar active={activePage} onChange={setActivePage} />
+    <div className="min-h-screen bg-slate-50 p-8">
+      <div className="max-w-3xl mx-auto bg-white border border-slate-200 rounded-lg p-8">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 rounded-lg bg-slate-900 flex items-center justify-center">
+            <Database size={20} className="text-white" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold">Diagnostica Dashboard 2.0</h1>
+            <p className="text-sm text-slate-500">Esegui i test in ordine. Il primo che fallisce ci dice dov'è il bug.</p>
+          </div>
+        </div>
 
-      <main className="flex-1 min-w-0 flex flex-col">
-        <header className="sticky top-0 z-20 bg-white border-b border-slate-200 px-8 py-4">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <h1 className="text-xl font-bold text-slate-900">
-                {NAV_ITEMS.find((n) => n.key === activePage)?.label ?? "Dashboard"}
-              </h1>
-              <div className="text-sm text-slate-500 mt-0.5">
-                Periodo: <span className="font-medium text-slate-700">
-                  {formatPeriodLabel(period.type, period.anchor)}
-                </span>
-                {hasSyncInfo && (
-                  <span className="ml-3 text-slate-400">
-                    · Ultima sincronizzazione: {getMostRecentSync(lastSync)}
-                  </span>
+        <div className="space-y-2">
+          {tests.map((t) => (
+            <div key={t.name} className="flex items-start gap-3 py-2 border-b border-slate-100">
+              <button
+                onClick={() => test(t.name, t.fn)}
+                className="px-3 py-1 bg-slate-900 text-white rounded text-xs hover:bg-slate-700 flex-shrink-0"
+              >
+                Test
+              </button>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-slate-900">{t.name}</div>
+                {tested[t.name] && (
+                  <div className="flex items-start gap-2 mt-1 text-xs text-green-700">
+                    <CheckCircle2 size={12} className="mt-0.5 flex-shrink-0" />
+                    <span className="break-all">{tested[t.name]}</span>
+                  </div>
+                )}
+                {errors[t.name] && (
+                  <div className="flex items-start gap-2 mt-1 text-xs text-red-700">
+                    <AlertCircle size={12} className="mt-0.5 flex-shrink-0" />
+                    <pre className="whitespace-pre-wrap break-all">{errors[t.name]}</pre>
+                  </div>
                 )}
               </div>
             </div>
-
-            <div className="flex items-center gap-3">
-              <TimeframeSelector
-                type={period.type}
-                anchor={period.anchor}
-                onChange={setPeriod}
-              />
-              <SyncButton
-                statuses={syncStatuses}
-                sources={syncSources}
-                running={!!sync.running}
-                lastRunAt={sync.lastRunAt ?? null}
-                onClick={() => sync.runSync?.(data.refresh)}
-              />
-            </div>
-          </div>
-        </header>
-
-        <div className="flex-1 px-8 py-6">
-          {data.loading && !data.current ? (
-            <Loading size="lg" label="Caricamento dati Zoho..." />
-          ) : (
-            <PageContent activePage={activePage} data={data} />
-          )}
+          ))}
         </div>
-      </main>
-    </div>
-  );
-}
 
-function PageContent({ activePage, data }) {
-  switch (activePage) {
-    case "cruscotto":
-      return <Cruscotto data={data} />;
-    default:
-      return <Placeholder pageKey={activePage} />;
-  }
-}
-
-function Placeholder({ pageKey }) {
-  const item = NAV_ITEMS.find((n) => n.key === pageKey);
-  return (
-    <div className="bg-white border border-slate-200 rounded-lg p-12 text-center">
-      <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-amber-100 text-amber-700 mb-4">
-        <Construction size={26} />
+        <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+          📌 Esegui i test <strong>uno alla volta dall'alto verso il basso</strong>. 
+          Se uno fallisce mandami screenshot dell'errore. Quando trovi il colpevole, lo fixiamo subito.
+        </div>
       </div>
-      <h2 className="text-xl font-bold text-slate-900 mb-2">
-        {item?.label ?? pageKey}
-      </h2>
-      <p className="text-slate-600 max-w-md mx-auto">
-        Sezione in costruzione. Verrà aggiunta nelle prossime sessioni di sviluppo.
-      </p>
-      <p className="text-sm text-slate-400 mt-4">
-        Per ora puoi vedere i dati nel <span className="font-medium">Cruscotto</span>.
-      </p>
     </div>
-  );
-}
-
-function getMostRecentSync(lastSyncByPart) {
-  if (!lastSyncByPart || typeof lastSyncByPart !== "object") return "—";
-  let mostRecent = null;
-  for (const v of Object.values(lastSyncByPart)) {
-    if (!v?.finished_at) continue;
-    const t = new Date(v.finished_at).getTime();
-    if (!mostRecent || t > mostRecent.time) {
-      mostRecent = { time: t, iso: v.finished_at };
-    }
-  }
-  return mostRecent ? formatRelative(mostRecent.iso) : "—";
-}
-
-// Esporto wrappato in ErrorBoundary
-export default function App() {
-  return (
-    <ErrorBoundary>
-      <AppInner />
-    </ErrorBoundary>
   );
 }
