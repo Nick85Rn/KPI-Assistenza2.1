@@ -1,4 +1,4 @@
-// src/App.jsx — versione produzione
+// src/App.jsx — versione produzione finale
 
 import { useState, useMemo, Component } from "react";
 import Sidebar, { NAV_ITEMS } from "./components/Sidebar";
@@ -9,6 +9,7 @@ import Cruscotto from "./pages/Cruscotto";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { useSyncStatus } from "./hooks/useSyncStatus";
 import { periodBounds, previousPeriod, yoyPeriod, formatPeriodLabel } from "./lib/periods";
+import { formatRelative } from "./lib/format";
 import { Construction, AlertTriangle } from "lucide-react";
 
 class ErrorBoundary extends Component {
@@ -74,6 +75,9 @@ function AppInner() {
   const data = useDashboardData(ranges) || {};
   const sync = useSyncStatus() || {};
 
+  const lastSync = data.lastSync && typeof data.lastSync === "object" ? data.lastSync : {};
+  const hasSyncInfo = Object.keys(lastSync).length > 0;
+
   return (
     <div className="min-h-screen flex bg-slate-50 text-slate-900">
       <Sidebar active={activePage} onChange={setActivePage} />
@@ -86,7 +90,14 @@ function AppInner() {
                 {NAV_ITEMS.find((n) => n.key === activePage)?.label ?? "Dashboard"}
               </h1>
               <div className="text-sm text-slate-500 mt-0.5">
-                Periodo: {formatPeriodLabel(period.type, period.anchor)}
+                Periodo: <span className="font-medium text-slate-700">
+                  {formatPeriodLabel(period.type, period.anchor)}
+                </span>
+                {hasSyncInfo && (
+                  <span className="ml-3 text-slate-400">
+                    · Ultima sincronizzazione: {getMostRecentSync(lastSync)}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -97,7 +108,10 @@ function AppInner() {
                 onChange={setPeriod}
               />
               <SyncButton
+                statuses={sync.statuses}
+                sources={sync.sources}
                 running={!!sync.running}
+                lastRunAt={sync.lastRunAt}
                 onClick={() => sync.runSync?.(data.refresh)}
               />
             </div>
@@ -133,6 +147,19 @@ function Placeholder({ pageKey }) {
       <p className="text-slate-600">Sezione in costruzione.</p>
     </div>
   );
+}
+
+function getMostRecentSync(lastSyncByPart) {
+  if (!lastSyncByPart || typeof lastSyncByPart !== "object") return "—";
+  let mostRecent = null;
+  for (const v of Object.values(lastSyncByPart)) {
+    if (!v?.finished_at) continue;
+    const t = new Date(v.finished_at).getTime();
+    if (!mostRecent || t > mostRecent.time) {
+      mostRecent = { time: t, iso: v.finished_at };
+    }
+  }
+  return mostRecent ? formatRelative(mostRecent.iso) : "—";
 }
 
 export default function App() {
