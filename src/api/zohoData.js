@@ -406,6 +406,12 @@ function splitCompanyName(raw) {
  *   - distribuzione per topic (categorie Zoho)
  *   - trend mensile (sessioni e ore per mese)
  */
+/**
+ * Restituisce i dettagli estesi della formazione per il periodo:
+ *   - top 10 clienti (per ore)
+ *   - distribuzione per topic (le sessioni senza topic compaiono come "Tipologia non presente")
+ *   - trend mensile (sessioni e ore per mese)
+ */
 export async function getFormazioneDetails(period) {
   const { from, to } = asDateRange(period);
   const fromIso = `${from}T00:00:00`;
@@ -422,6 +428,87 @@ export async function getFormazioneDetails(period) {
     return emptyFormazioneDetails();
   }
 
+  const rows = data ?? [];
+  const NO_TOPIC_LABEL = "Tipologia non presente";
+
+  // ---- Top clienti ----
+  const byCompany = new Map();
+  for (const r of rows) {
+    if (!r.company) continue;
+    const key = r.company.trim();
+    if (!byCompany.has(key)) {
+      const { name, vat } = splitCompanyName(key);
+      byCompany.set(key, {
+        company: key,
+        name,
+        vat,
+        is_internal: INTERNAL_COMPANIES.has(key),
+        sessions: 0,
+        minutes: 0,
+      });
+    }
+    const o = byCompany.get(key);
+    o.sessions += 1;
+    o.minutes += asNum(r.duration_minutes);
+  }
+  const topClients = Array.from(byCompany.values())
+    .sort((a, b) => b.minutes - a.minutes)
+    .slice(0, 10);
+
+  // ---- Distribuzione topic (incluse "non taggate") ----
+  const byTopic = new Map();
+  for (const r of rows) {
+    const raw = (r.topic || "").trim();
+    const t = raw || NO_TOPIC_LABEL;
+    if (!byTopic.has(t)) {
+      byTopic.set(t, {
+        topic: t,
+        sessions: 0,
+        minutes: 0,
+        is_untagged: t === NO_TOPIC_LABEL,
+      });
+    }
+    const o = byTopic.get(t);
+    o.sessions += 1;
+    o.minutes += asNum(r.duration_minutes);
+  }
+  // Ordino per sessioni desc, MA "Tipologia non presente" sempre in fondo
+  const topics = Array.from(byTopic.values()).sort((a, b) => {
+    if (a.is_untagged && !b.is_untagged) return 1;
+    if (!a.is_untagged && b.is_untagged) return -1;
+    return b.sessions - a.sessions;
+  });
+
+  // ---- Trend mensile ----
+  const byMonth = new Map();
+  for (const r of rows) {
+    if (!r.created_time) continue;
+    const d = new Date(r.created_time);
+    if (isNaN(d.getTime())) continue;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    if (!byMonth.has(key)) byMonth.set(key, { month: key, sessions: 0, minutes: 0 });
+    const o = byMonth.get(key);
+    o.sessions += 1;
+    o.minutes += asNum(r.duration_minutes);
+  }
+  const trend = Array.from(byMonth.values()).sort((a, b) => a.month.localeCompare(b.month));
+
+  return {
+    top_clients: topClients,
+    topics,
+    trend,
+    total_sessions: rows.length,
+  };
+}
+
+function emptyFormazioneDetails() {
+  return {
+    top_clients: [],
+    topics: [],
+    trend: [],
+    total_sessions: 0,
+  };
+}
   const rows = data ?? [];
 
   // ---- Top clienti ----
