@@ -1,10 +1,11 @@
-// src/App.jsx — versione produzione con routing multi-pagina
+// src/App.jsx — versione produzione con overlay di caricamento
 
 import { useState, useMemo, Component } from "react";
 import Sidebar, { NAV_ITEMS } from "./components/Sidebar";
 import TimeframeSelector from "./components/TimeframeSelector";
 import SyncButton from "./components/SyncButton";
 import Loading from "./components/Loading";
+import LoadingOverlay from "./components/LoadingOverlay";
 import Cruscotto from "./pages/Cruscotto";
 import RepartoChat from "./pages/RepartoChat";
 import { useDashboardData } from "./hooks/useDashboardData";
@@ -73,7 +74,6 @@ function AppInner() {
     };
   }, [period.type, period.anchor.getTime()]);
 
-  // Calcoliamo gli extras in base alla pagina attiva: extra dati solo dove servono
   const extras = useMemo(() => {
     if (activePage === "chat") {
       return { heatmap: true, topVisitors: true };
@@ -86,6 +86,13 @@ function AppInner() {
 
   const lastSync = data.lastSync && typeof data.lastSync === "object" ? data.lastSync : {};
   const hasSyncInfo = Object.keys(lastSync).length > 0;
+
+  // L'overlay appare quando stiamo aggiornando MA abbiamo già dati visibili
+  // Per il primo caricamento usiamo invece il <Loading /> standard
+  const showOverlay = !!data.loading && !!data.current;
+  const overlayLabel = sync.running
+    ? "Sincronizzazione con Zoho in corso..."
+    : "Aggiornamento dati...";
 
   return (
     <div className="min-h-screen flex bg-slate-50 text-slate-900">
@@ -133,6 +140,9 @@ function AppInner() {
           </ErrorBoundary>
         </div>
       </main>
+
+      {/* Overlay globale - sopra a tutto */}
+      <LoadingOverlay visible={showOverlay} label={overlayLabel} />
     </div>
   );
 }
