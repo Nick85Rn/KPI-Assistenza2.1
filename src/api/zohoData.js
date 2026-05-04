@@ -301,3 +301,102 @@ export async function pingSupabase() {
   const { error } = await supabase.from("zoho_credentials").select("source").limit(1);
   return !error;
 }
+// ============================================================
+// HEATMAP CHAT (7×24 = giorno settimana × ora del giorno)
+// ============================================================
+
+/**
+ * Aggrega la heatmap per il periodo dato.
+ * Restituisce una matrice 7×24 con i conteggi.
+ */
+export async function getChatHeatmap(period) {
+  const { from, to } = asDateRange(period);
+
+  const { data, error } = await supabase
+    .from("zoho_chat_heatmap")
+    .select("day_of_week, hour_of_day, chats_count, attended_count")
+    .gte("date", from)
+    .lte("date", to);
+
+  if (error) {
+    console.error("getChatHeatmap:", error.message);
+    return emptyHeatmap();
+  }
+
+  // Costruisce matrice 7×24
+  const grid = Array.from({ length: 7 }, () =>
+    Array.from({ length: 24 }, () => ({ chats: 0, attended: 0 })),
+  );
+
+  let totalChats = 0;
+  let maxCellChats = 0;
+
+  for (const row of data ?? []) {
+    const d = row.day_of_week;
+    const h = row.hour_of_day;
+    if (d < 0 || d > 6 || h < 0 || h > 23) continue;
+    grid[d][h].chats += asNum(row.chats_count);
+    grid[d][h].attended += asNum(row.attended_count);
+    totalChats += asNum(row.chats_count);
+    if (grid[d][h].chats > maxCellChats) maxCellChats = grid[d][h].chats;
+  }
+
+  return { grid, totalChats, maxCellChats };
+}
+
+function emptyHeatmap() {
+  return {
+    grid: Array.from({ length: 7 }, () =>
+      Array.from({ length: 24 }, () => ({ chats: 0, attended: 0 })),
+    ),
+    totalChats: 0,
+    maxCellChats: 0,
+  };
+}
+
+// ============================================================
+// TOP VISITATORI (clienti che chattano di più)
+// ============================================================
+
+/**
+ * Top N clienti per numero di chat nel periodo.
+ */
+export async function getTopVisitors(period, limit = 10) {
+  const { from, to } = asDateRange(period);
+  const fromIso = `${from}T00:00:00`;
+  const toIso = `${to}T23:59:59`;
+
+  // Chat valide del periodo, raggruppate per visitor_name
+  const { data, error } = await supabase
+    .from("zoho_raw_chats")
+    .select("visitor_name, created_time, operator, duration_seconds")
+    .gte("created_time", fromIso)
+    .lte("created_time", toIso)
+    .not("visitor_name", "is", null);
+
+  if (error) {
+    console.error("getTopVisitors:", error.message);
+    return [];
+  }
+
+  // Aggrego in JS (la lista filtra anche le ghost)
+  const byVisitor = new Map();
+  for (const r of data ?? []) {
+    if (!r.visitor_name) continue;
+    const isGhost = !r.operator && (r.duration_seconds == null || r.duration_seconds < 1);
+    if (isGhost) continue;
+    const v = r.visitor_name.trim();
+    if (!byVisitor.has(v)) {
+      byVisitor.set(v, { visitor: v, chats: 0, last_chat: null });
+    }
+    const o = byVisitor.get(v);
+    o.chats += 1;
+    if (!o.last_chat || new Date(r.created_time) > new Date(o.last_chat)) {
+      o.last_chat = r.created_time;
+    }
+  }
+
+  return Array.from(byVisitor.values())
+    .sort((a, b) => b.chats - a.chats)
+    .slice(0, limit);
+}
