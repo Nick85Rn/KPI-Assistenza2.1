@@ -379,6 +379,130 @@ export async function getTopVisitors(period, limit = 10) {
     return [];
   }
 
+  // ============================================================
+// FORMAZIONE - DETTAGLI ESTESI (top clienti, topic, trend)
+// ============================================================
+
+// Lista delle "company" che in realtà sono categorie tecniche interne, non clienti veri.
+// Le mostriamo nei top con un tag "Interno".
+const INTERNAL_COMPANIES = new Set([
+  "App Clienti Pienissimo PRO",
+  "Test P.pro Assistenza",
+]);
+
+/**
+ * Estrae nome e P.IVA dal formato "IT12345678901 - NOME AZIENDA".
+ */
+function splitCompanyName(raw) {
+  if (!raw) return { name: "(senza nome)", vat: null };
+  const m = raw.match(/^(IT\d{10,12})\s*[-–]\s*(.+)$/);
+  if (m) return { name: m[2].trim(), vat: m[1] };
+  return { name: raw.trim(), vat: null };
+}
+
+/**
+ * Restituisce i dettagli estesi della formazione per il periodo:
+ *   - top 10 clienti (per ore)
+ *   - distribuzione per topic (categorie Zoho)
+ *   - trend mensile (sessioni e ore per mese)
+ */
+export async function getFormazioneDetails(period) {
+  const { from, to } = asDateRange(period);
+  const fromIso = `${from}T00:00:00`;
+  const toIso = `${to}T23:59:59`;
+
+  const { data, error } = await supabase
+    .from("zoho_raw_formazione")
+    .select("company, topic, duration_minutes, created_time")
+    .gte("created_time", fromIso)
+    .lte("created_time", toIso);
+
+  if (error) {
+    console.error("getFormazioneDetails:", error.message);
+    return emptyFormazioneDetails();
+  }
+
+  const rows = data ?? [];
+
+  // ---- Top clienti ----
+  const byCompany = new Map();
+  for (const r of rows) {
+    if (!r.company) continue;
+    const key = r.company.trim();
+    if (!byCompany.has(key)) {
+      const { name, vat } = splitCompanyName(key);
+      byCompany.set(key, {
+        company: key,
+        name,
+        vat,
+        is_internal: INTERNAL_COMPANIES.has(key),
+        sessions: 0,
+        minutes: 0,
+      });
+    }
+    const o = byCompany.get(key);
+    o.sessions += 1;
+    o.minutes += asNum(r.duration_minutes);
+  }
+  const topClients = Array.from(byCompany.values())
+    .sort((a, b) => b.minutes - a.minutes)
+    .slice(0, 10);
+
+  // ---- Distribuzione topic (escluso vuoto) ----
+  const byTopic = new Map();
+  let untaggedCount = 0;
+  let untaggedMinutes = 0;
+  for (const r of rows) {
+    const t = (r.topic || "").trim();
+    if (!t) {
+      untaggedCount += 1;
+      untaggedMinutes += asNum(r.duration_minutes);
+      continue;
+    }
+    if (!byTopic.has(t)) byTopic.set(t, { topic: t, sessions: 0, minutes: 0 });
+    const o = byTopic.get(t);
+    o.sessions += 1;
+    o.minutes += asNum(r.duration_minutes);
+  }
+  const topics = Array.from(byTopic.values()).sort((a, b) => b.sessions - a.sessions);
+
+  // ---- Trend mensile ----
+  const byMonth = new Map();
+  for (const r of rows) {
+    if (!r.created_time) continue;
+    const d = new Date(r.created_time);
+    if (isNaN(d.getTime())) continue;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    if (!byMonth.has(key)) byMonth.set(key, { month: key, sessions: 0, minutes: 0 });
+    const o = byMonth.get(key);
+    o.sessions += 1;
+    o.minutes += asNum(r.duration_minutes);
+  }
+  const trend = Array.from(byMonth.values()).sort((a, b) => a.month.localeCompare(b.month));
+
+  return {
+    top_clients: topClients,
+    topics,
+    trend,
+    untagged: {
+      sessions: untaggedCount,
+      minutes: untaggedMinutes,
+      pct_of_total: rows.length > 0 ? untaggedCount / rows.length : 0,
+    },
+    total_sessions: rows.length,
+  };
+}
+
+function emptyFormazioneDetails() {
+  return {
+    top_clients: [],
+    topics: [],
+    trend: [],
+    untagged: { sessions: 0, minutes: 0, pct_of_total: 0 },
+    total_sessions: 0,
+  };
+}
+
   // Aggrego in JS (la lista filtra anche le ghost)
   const byVisitor = new Map();
   for (const r of data ?? []) {
