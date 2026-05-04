@@ -1,4 +1,4 @@
-// src/App.jsx — versione produzione finale
+// src/App.jsx — versione produzione con routing multi-pagina
 
 import { useState, useMemo, Component } from "react";
 import Sidebar, { NAV_ITEMS } from "./components/Sidebar";
@@ -6,6 +6,7 @@ import TimeframeSelector from "./components/TimeframeSelector";
 import SyncButton from "./components/SyncButton";
 import Loading from "./components/Loading";
 import Cruscotto from "./pages/Cruscotto";
+import RepartoChat from "./pages/RepartoChat";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { useSyncStatus } from "./hooks/useSyncStatus";
 import { periodBounds, previousPeriod, yoyPeriod, formatPeriodLabel } from "./lib/periods";
@@ -72,7 +73,15 @@ function AppInner() {
     };
   }, [period.type, period.anchor.getTime()]);
 
-  const data = useDashboardData(ranges) || {};
+  // Calcoliamo gli extras in base alla pagina attiva: extra dati solo dove servono
+  const extras = useMemo(() => {
+    if (activePage === "chat") {
+      return { heatmap: true, topVisitors: true };
+    }
+    return {};
+  }, [activePage]);
+
+  const data = useDashboardData({ ...ranges, extras }) || {};
   const sync = useSyncStatus() || {};
 
   const lastSync = data.lastSync && typeof data.lastSync === "object" ? data.lastSync : {};
@@ -120,20 +129,26 @@ function AppInner() {
 
         <div className="flex-1 px-8 py-6">
           <ErrorBoundary>
-            {activePage === "cruscotto" ? (
-              data.loading && !data.current ? (
-                <Loading size="lg" label="Caricamento dati Zoho..." />
-              ) : (
-                <Cruscotto data={data} />
-              )
-            ) : (
-              <Placeholder pageKey={activePage} />
-            )}
+            <PageContent activePage={activePage} data={data} />
           </ErrorBoundary>
         </div>
       </main>
     </div>
   );
+}
+
+function PageContent({ activePage, data }) {
+  if (data.loading && !data.current) {
+    return <Loading size="lg" label="Caricamento dati Zoho..." />;
+  }
+  switch (activePage) {
+    case "cruscotto":
+      return <Cruscotto data={data} />;
+    case "chat":
+      return <RepartoChat data={data} />;
+    default:
+      return <Placeholder pageKey={activePage} />;
+  }
 }
 
 function Placeholder({ pageKey }) {
