@@ -1,10 +1,11 @@
 // src/components/TimeframeSelector.jsx
-// Selettore Settimana / Mese / Anno con navigazione avanti/indietro.
+// Selettore Giorno / Settimana / Mese / Anno con navigazione avanti/indietro.
 
 import { ChevronLeft, ChevronRight, Calendar } from "lucide-react";
 import { formatPeriodLabel, shiftAnchor } from "../lib/periods";
 
 const TYPES = [
+  { key: "day",   label: "Giorno" },
   { key: "week",  label: "Settimana" },
   { key: "month", label: "Mese" },
   { key: "year",  label: "Anno" },
@@ -28,6 +29,7 @@ export default function TimeframeSelector({ type, anchor, onChange }) {
 
   return (
     <div className="flex items-center gap-3">
+      {/* Selettore tipo */}
       <div className="inline-flex bg-slate-100 rounded-lg p-1">
         {TYPES.map((t) => (
           <button
@@ -44,6 +46,7 @@ export default function TimeframeSelector({ type, anchor, onChange }) {
         ))}
       </div>
 
+      {/* Navigazione + label */}
       <div className="flex items-center gap-1">
         <button
           onClick={() => shift(-1)}
@@ -69,6 +72,7 @@ export default function TimeframeSelector({ type, anchor, onChange }) {
         </button>
       </div>
 
+      {/* Pulsante "Oggi" */}
       {!isCurrent && (
         <button
           onClick={goToToday}
@@ -86,6 +90,10 @@ function isAnchorCurrent(type, anchor) {
   if (!(anchor instanceof Date)) return false;
   const now = new Date();
   switch (type) {
+    case "day":
+      return anchor.getFullYear() === now.getFullYear()
+          && anchor.getMonth() === now.getMonth()
+          && anchor.getDate() === now.getDate();
     case "week": {
       const d1 = isoWeekKey(anchor);
       const d2 = isoWeekKey(now);
