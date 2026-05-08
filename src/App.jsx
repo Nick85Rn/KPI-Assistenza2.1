@@ -1,4 +1,4 @@
-// src/App.jsx — versione produzione con overlay di caricamento
+// src/App.jsx — versione produzione con routing multi-pagina
 
 import { useState, useMemo, Component } from "react";
 import Sidebar, { NAV_ITEMS } from "./components/Sidebar";
@@ -8,6 +8,7 @@ import Loading from "./components/Loading";
 import LoadingOverlay from "./components/LoadingOverlay";
 import Cruscotto from "./pages/Cruscotto";
 import RepartoChat from "./pages/RepartoChat";
+import Formazione from "./pages/Formazione";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { useSyncStatus } from "./hooks/useSyncStatus";
 import { periodBounds, previousPeriod, yoyPeriod, formatPeriodLabel } from "./lib/periods";
@@ -74,9 +75,13 @@ function AppInner() {
     };
   }, [period.type, period.anchor.getTime()]);
 
+  // Extras dipendono dalla pagina attiva
   const extras = useMemo(() => {
     if (activePage === "chat") {
       return { heatmap: true, topVisitors: true };
+    }
+    if (activePage === "formazione") {
+      return { formazioneDetails: true };
     }
     return {};
   }, [activePage]);
@@ -87,8 +92,6 @@ function AppInner() {
   const lastSync = data.lastSync && typeof data.lastSync === "object" ? data.lastSync : {};
   const hasSyncInfo = Object.keys(lastSync).length > 0;
 
-  // L'overlay appare quando stiamo aggiornando MA abbiamo già dati visibili
-  // Per il primo caricamento usiamo invece il <Loading /> standard
   const showOverlay = !!data.loading && !!data.current;
   const overlayLabel = sync.running
     ? "Sincronizzazione con Zoho in corso..."
@@ -141,7 +144,6 @@ function AppInner() {
         </div>
       </main>
 
-      {/* Overlay globale - sopra a tutto */}
       <LoadingOverlay visible={showOverlay} label={overlayLabel} />
     </div>
   );
@@ -156,6 +158,8 @@ function PageContent({ activePage, data }) {
       return <Cruscotto data={data} />;
     case "chat":
       return <RepartoChat data={data} />;
+    case "formazione":
+      return <Formazione data={data} />;
     default:
       return <Placeholder pageKey={activePage} />;
   }
