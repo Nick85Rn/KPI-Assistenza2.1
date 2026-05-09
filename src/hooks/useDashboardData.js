@@ -1,9 +1,5 @@
 // src/hooks/useDashboardData.js
 // Hook unificato: dato un periodo, restituisce TUTTI i dati della dashboard.
-// Gestisce loading, error, e refresh manuale tramite refresh().
-// 
-// Opzione `extras`: per le pagine che hanno bisogno di dati aggiuntivi
-// (heatmap, top visitors, ecc.) — caricati solo per il periodo corrente.
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
@@ -13,16 +9,20 @@ import {
   getLastSyncByPart,
   getChatHeatmap,
   getTopVisitors,
+  getFormazioneDetails,
+  getAssistenzaDetails,
 } from "../api/zohoData";
 
 /**
  * @param {Object} params
  * @param {Date}   params.start, params.end       - periodo corrente
- * @param {Date}   params.prevStart, params.prevEnd - periodo precedente
- * @param {Date}   params.yoyStart, params.yoyEnd   - stesso periodo anno scorso
- * @param {Object} params.extras                  - flags per caricare dati extra
- * @param {bool}   params.extras.heatmap          - carica heatmap chat 7x24
- * @param {bool}   params.extras.topVisitors      - carica top 10 visitatori
+ * @param {Date}   params.prevStart, params.prevEnd
+ * @param {Date}   params.yoyStart, params.yoyEnd
+ * @param {Object} params.extras                  - flags
+ * @param {bool}   params.extras.heatmap
+ * @param {bool}   params.extras.topVisitors
+ * @param {bool}   params.extras.formazioneDetails
+ * @param {bool}   params.extras.assistenzaDetails
  */
 export function useDashboardData({
   start, end, prevStart, prevEnd, yoyStart, yoyEnd,
@@ -35,16 +35,19 @@ export function useDashboardData({
     previous: null,
     yoy: null,
     lastSync: null,
-    heatmap: null,        // matrice 7×24 + totalChats + maxCellChats
-    topVisitors: null,    // array di {visitor, chats, last_chat}
+    heatmap: null,
+    topVisitors: null,
+    formazioneDetails: null,
+    assistenzaDetails: null,
   });
 
   const requestIdRef = useRef(0);
 
-  // Estraggo le opzioni extras come stringa per il dependency array dell'effetto
   const extrasKey = JSON.stringify({
     heatmap: !!extras.heatmap,
     topVisitors: !!extras.topVisitors,
+    formazioneDetails: !!extras.formazioneDetails,
+    assistenzaDetails: !!extras.assistenzaDetails,
   });
 
   const load = useCallback(async () => {
@@ -58,6 +61,8 @@ export function useDashboardData({
 
       const wantHeatmap = !!extras.heatmap;
       const wantTopVisitors = !!extras.topVisitors;
+      const wantFormazione = !!extras.formazioneDetails;
+      const wantAssistenza = !!extras.assistenzaDetails;
 
       const [
         curAss, curSvi, curChat, curForm,
@@ -66,6 +71,8 @@ export function useDashboardData({
         lastSync,
         heatmapData,
         topVisitorsData,
+        formazioneDetailsData,
+        assistenzaDetailsData,
       ] = await Promise.all([
         getTicketKpis("assistenza", cur),
         getTicketKpis("sviluppo", cur),
@@ -82,6 +89,8 @@ export function useDashboardData({
         getLastSyncByPart(),
         wantHeatmap ? getChatHeatmap(cur) : Promise.resolve(null),
         wantTopVisitors ? getTopVisitors(cur, 10) : Promise.resolve(null),
+        wantFormazione ? getFormazioneDetails(cur) : Promise.resolve(null),
+        wantAssistenza ? getAssistenzaDetails(cur) : Promise.resolve(null),
       ]);
 
       if (reqId !== requestIdRef.current) return;
@@ -110,6 +119,8 @@ export function useDashboardData({
         lastSync,
         heatmap: heatmapData,
         topVisitors: topVisitorsData,
+        formazioneDetails: formazioneDetailsData,
+        assistenzaDetails: assistenzaDetailsData,
       });
     } catch (err) {
       if (reqId !== requestIdRef.current) return;
