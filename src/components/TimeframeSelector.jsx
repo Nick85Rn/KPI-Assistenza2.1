@@ -29,7 +29,6 @@ export default function TimeframeSelector({ type, anchor, onChange }) {
 
   return (
     <div className="flex items-center gap-3">
-      {/* Selettore tipo */}
       <div className="inline-flex bg-slate-100 rounded-lg p-1">
         {TYPES.map((t) => (
           <button
@@ -46,7 +45,6 @@ export default function TimeframeSelector({ type, anchor, onChange }) {
         ))}
       </div>
 
-      {/* Navigazione + label */}
       <div className="flex items-center gap-1">
         <button
           onClick={() => shift(-1)}
@@ -56,7 +54,7 @@ export default function TimeframeSelector({ type, anchor, onChange }) {
           <ChevronLeft size={18} />
         </button>
 
-        <div className="px-3 py-1.5 min-w-[200px] text-center">
+        <div className="px-3 py-1.5 min-w-[220px] text-center">
           <div className="text-sm font-semibold text-slate-900">
             {formatPeriodLabel(type, anchor)}
           </div>
@@ -72,16 +70,18 @@ export default function TimeframeSelector({ type, anchor, onChange }) {
         </button>
       </div>
 
-      {/* Pulsante "Oggi" */}
-      {!isCurrent && (
-        <button
-          onClick={goToToday}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-50 rounded-md transition-colors"
-        >
-          <Calendar size={14} />
-          Oggi
-        </button>
-      )}
+      {/* Spazio FISSO per il pulsante "Oggi" - evita che la barra si sposti */}
+      <div className="w-[88px] flex justify-start">
+        {!isCurrent && (
+          <button
+            onClick={goToToday}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-50 rounded-md transition-colors"
+          >
+            <Calendar size={14} />
+            Oggi
+          </button>
+        )}
+      </div>
     </div>
   );
 }
