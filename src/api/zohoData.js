@@ -542,3 +542,158 @@ function emptyFormazioneDetails() {
     total_sessions: 0,
   };
 }
+// ============================================================
+// ASSISTENZA - DETTAGLI ESTESI (canali, status, assignee, trend)
+// ============================================================
+
+const ASSISTENZA_OPEN_STATUSES = ["Aperto", "In attesa"];
+const ASSISTENZA_CLOSED_STATUSES = ["Chiuso", "Chiuso da Assistenza"];
+
+/**
+ * Restituisce dettagli estesi della tabella Assistenza per il periodo:
+ *   - Distribuzione per canale (Chat / Email / Web ...)
+ *   - Distribuzione per status
+ *   - Top assignee con metriche
+ *   - Trend giornaliero (creati / chiusi / backlog)
+ *   - Backlog corrente (totale ticket attualmente non chiusi)
+ */
+export async function getAssistenzaDetails(period) {
+  const { from, to } = asDateRange(period);
+  const fromIso = `${from}T00:00:00`;
+  const toIso = `${to}T23:59:59`;
+
+  // ---- 1. Ticket creati nel periodo (per distribuzioni e trend) ----
+  const { data: createdRows, error: e1 } = await supabase
+    .from("zoho_raw_assistenza")
+    .select("ticket_id, status, channel, assignee, created_time, closed_time, first_response_sec, resolution_sec")
+    .gte("created_time", fromIso)
+    .lte("created_time", toIso);
+
+  if (e1) {
+    console.error("getAssistenzaDetails created:", e1.message);
+    return emptyAssistenzaDetails();
+  }
+  const rows = createdRows ?? [];
+
+  // ---- 2. Backlog corrente (ticket NON chiusi in totale) ----
+  const { count: backlogCount, error: e2 } = await supabase
+    .from("zoho_raw_assistenza")
+    .select("ticket_id", { count: "exact", head: true })
+    .in("status", ASSISTENZA_OPEN_STATUSES);
+
+  if (e2) {
+    console.error("getAssistenzaDetails backlog:", e2.message);
+  }
+
+  // ---- Distribuzione canale ----
+  const byChannel = new Map();
+  for (const r of rows) {
+    const c = r.channel || "(non specificato)";
+    if (!byChannel.has(c)) byChannel.set(c, { channel: c, count: 0 });
+    byChannel.get(c).count++;
+  }
+  const channels = Array.from(byChannel.values()).sort((a, b) => b.count - a.count);
+
+  // ---- Distribuzione status ----
+  const byStatus = new Map();
+  for (const r of rows) {
+    const s = r.status || "(non specificato)";
+    if (!byStatus.has(s)) byStatus.set(s, { status: s, count: 0, is_open: false, is_closed: false });
+    const o = byStatus.get(s);
+    o.count++;
+    o.is_open = ASSISTENZA_OPEN_STATUSES.includes(s);
+    o.is_closed = ASSISTENZA_CLOSED_STATUSES.includes(s);
+  }
+  const statuses = Array.from(byStatus.values()).sort((a, b) => b.count - a.count);
+
+  // ---- Top assignee ----
+  const byAssignee = new Map();
+  for (const r of rows) {
+    const rawName = r.assignee;
+    const a = rawName ? normalizeOperatorName(rawName) : "(non assegnato)";
+    if (!byAssignee.has(a)) {
+      byAssignee.set(a, {
+        assignee: a,
+        tickets: 0,
+        closed: 0,
+        _sumFirst: 0,
+        _countFirst: 0,
+        _sumRes: 0,
+        _countRes: 0,
+      });
+    }
+    const o = byAssignee.get(a);
+    o.tickets++;
+    if (r.closed_time) o.closed++;
+    if (r.first_response_sec != null) {
+      o._sumFirst += asNum(r.first_response_sec);
+      o._countFirst++;
+    }
+    if (r.resolution_sec != null) {
+      o._sumRes += asNum(r.resolution_sec);
+      o._countRes++;
+    }
+  }
+  const assignees = Array.from(byAssignee.values())
+    .map((o) => ({
+      assignee: o.assignee,
+      tickets: o.tickets,
+      closed: o.closed,
+      pct_closed: o.tickets > 0 ? o.closed / o.tickets : null,
+      avg_first_response_sec: o._countFirst > 0 ? Math.round(o._sumFirst / o._countFirst) : null,
+      avg_resolution_sec: o._countRes > 0 ? Math.round(o._sumRes / o._countRes) : null,
+    }))
+    .sort((a, b) => b.tickets - a.tickets);
+
+  // ---- Trend giornaliero ----
+  // Uso le tabelle aggregate giornaliere
+  const { data: dailyRows } = await supabase
+    .from("zoho_daily_assistenza")
+    .select("date, new_tickets, closed_tickets, backlog")
+    .gte("date", from)
+    .lte("date", to)
+    .order("date", { ascending: true });
+
+  const trend = (dailyRows ?? []).map((d) => ({
+    date: d.date,
+    new_tickets: asNum(d.new_tickets),
+    closed_tickets: asNum(d.closed_tickets),
+    backlog: asNum(d.backlog),
+  }));
+
+  return {
+    channels,
+    statuses,
+    assignees,
+    trend,
+    total_in_period: rows.length,
+    backlog_total: backlogCount ?? 0,
+  };
+}
+
+function emptyAssistenzaDetails() {
+  return {
+    channels: [],
+    statuses: [],
+    assignees: [],
+    trend: [],
+    total_in_period: 0,
+    backlog_total: 0,
+  };
+}
+
+/**
+ * Normalizza il nome operatore (capitalizzazione consistente).
+ * Esempio: "margarita Giardi" -> "Margarita Giardi"
+ */
+function normalizeOperatorName(name) {
+  if (!name) return name;
+  return name
+    .split(/\s+/)
+    .map((part) => {
+      if (!part) return part;
+      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    })
+    .join(" ")
+    .trim();
+}
