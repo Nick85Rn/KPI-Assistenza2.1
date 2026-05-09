@@ -1,5 +1,6 @@
 // src/components/TimeframeSelector.jsx
-// Selettore Giorno / Settimana / Mese / Anno con navigazione avanti/indietro.
+// Selettore Giorno / Settimana / Mese / Anno con layout STABILE.
+// Tutti gli elementi hanno larghezze fisse per evitare shift quando cambia il tipo.
 
 import { ChevronLeft, ChevronRight, Calendar } from "lucide-react";
 import { formatPeriodLabel, shiftAnchor } from "../lib/periods";
@@ -28,8 +29,9 @@ export default function TimeframeSelector({ type, anchor, onChange }) {
   };
 
   return (
-    <div className="flex items-center gap-3">
-      <div className="inline-flex bg-slate-100 rounded-lg p-1">
+    <div className="flex items-center gap-2">
+      {/* SELETTORE TIPO - larghezza fissa contenitore */}
+      <div className="inline-flex bg-slate-100 rounded-lg p-1 flex-shrink-0">
         {TYPES.map((t) => (
           <button
             key={t.key}
@@ -45,17 +47,19 @@ export default function TimeframeSelector({ type, anchor, onChange }) {
         ))}
       </div>
 
-      <div className="flex items-center gap-1">
+      {/* NAVIGAZIONE - larghezza FISSA totale */}
+      <div className="flex items-center gap-0.5 flex-shrink-0">
         <button
           onClick={() => shift(-1)}
-          className="p-2 rounded-md hover:bg-slate-100 text-slate-600 transition-colors"
+          className="p-2 rounded-md hover:bg-slate-100 text-slate-600 transition-colors flex-shrink-0"
           aria-label="Periodo precedente"
         >
           <ChevronLeft size={18} />
         </button>
 
-        <div className="px-3 py-1.5 min-w-[220px] text-center">
-          <div className="text-sm font-semibold text-slate-900">
+        {/* Etichetta periodo - larghezza fissa per evitare shift */}
+        <div className="w-[260px] text-center px-2">
+          <div className="text-sm font-semibold text-slate-900 truncate">
             {formatPeriodLabel(type, anchor)}
           </div>
         </div>
@@ -63,24 +67,28 @@ export default function TimeframeSelector({ type, anchor, onChange }) {
         <button
           onClick={() => shift(+1)}
           disabled={isCurrent}
-          className="p-2 rounded-md hover:bg-slate-100 text-slate-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          className="p-2 rounded-md hover:bg-slate-100 text-slate-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0"
           aria-label="Periodo successivo"
         >
           <ChevronRight size={18} />
         </button>
       </div>
 
-      {/* Spazio FISSO per il pulsante "Oggi" - evita che la barra si sposti */}
-      <div className="w-[88px] flex justify-start">
-        {!isCurrent && (
-          <button
-            onClick={goToToday}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-50 rounded-md transition-colors"
-          >
-            <Calendar size={14} />
-            Oggi
-          </button>
-        )}
+      {/* PULSANTE OGGI - slot SEMPRE presente, contenuto invisibile se non serve */}
+      <div className="w-[88px] flex-shrink-0">
+        <button
+          onClick={goToToday}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all
+            ${isCurrent
+              ? "invisible pointer-events-none"
+              : "text-blue-700 hover:bg-blue-50 visible"
+            }`}
+          aria-label="Vai a oggi"
+          aria-hidden={isCurrent}
+        >
+          <Calendar size={14} />
+          Oggi
+        </button>
       </div>
     </div>
   );
