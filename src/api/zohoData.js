@@ -708,5 +708,217 @@ function emptyAssistenzaDetails() {
       unassigned: 0,
       last_synced_at: null,
     },
+    // ============================================================
+// SVILUPPO - DETTAGLI ESTESI
+// ============================================================
+
+const SVI_AGE_BUCKETS = [
+  { key: "0-7",       label: "0-7 giorni",     min: 0,    max: 7 },
+  { key: "7-30",      label: "7-30 giorni",    min: 7,    max: 30 },
+  { key: "30-90",     label: "30-90 giorni",   min: 30,   max: 90 },
+  { key: "90-180",    label: "90-180 giorni",  min: 90,   max: 180 },
+  { key: "180-365",   label: "180gg-1 anno",   min: 180,  max: 365 },
+  { key: "over-365",  label: "Oltre 1 anno",   min: 365,  max: Infinity },
+];
+
+function ageBucketFor(daysOld) {
+  for (const b of SVI_AGE_BUCKETS) {
+    if (daysOld >= b.min && daysOld < b.max) return b.key;
+  }
+  return "over-365";
+}
+
+/**
+ * Restituisce dettagli estesi della tabella Sviluppo per il periodo.
+ * Aggiunge rispetto ad Assistenza:
+ *  - backlog_by_age: distribuzione del backlog VIVO per età
+ *  - reopened_count: ticket "Ticket Ri-Aperto" nel periodo
+ */
+export async function getSviluppoDetails(period) {
+  const { from, to } = asDateRange(period);
+  const fromIso = `${from}T00:00:00`;
+  const toIso = `${to}T23:59:59`;
+
+  // Ticket creati nel periodo
+  const { data: createdRows, error: e1 } = await supabase
+    .from("zoho_raw_sviluppo")
+    .select("ticket_id, status, channel, assignee, created_time, closed_time, first_response_sec, resolution_sec")
+    .gte("created_time", fromIso)
+    .lte("created_time", toIso);
+
+  if (e1) {
+    console.error("getSviluppoDetails created:", e1.message);
+    return emptySviluppoDetails();
+  }
+  const rows = createdRows ?? [];
+
+  // Backlog VIVO completo (tutti gli stati aperti, in tutto il DB)
+  const { data: openRows, error: e2 } = await supabase
+    .from("zoho_raw_sviluppo")
+    .select("status, created_time, assignee")
+    .in("status", SVILUPPO_OPEN_STATUSES);
+
+  let backlogTotal = 0;
+  let backlogByStatus = [];
+  let backlogByAge = [];
+  let oldestDays = null;
+  let openUnassignedCount = 0;
+
+  if (!e2 && openRows) {
+    backlogTotal = openRows.length;
+
+    // Breakdown per status
+    const byStatus = new Map();
+    for (const r of openRows) {
+      const s = r.status || "(none)";
+      byStatus.set(s, (byStatus.get(s) || 0) + 1);
+      if (!r.assignee) openUnassignedCount++;
+    }
+    backlogByStatus = Array.from(byStatus.entries())
+      .map(([status, count]) => ({ status, count }))
+      .sort((a, b) => b.count - a.count);
+
+    // Breakdown per età
+    const ageMap = new Map();
+    for (const b of SVI_AGE_BUCKETS) {
+      ageMap.set(b.key, { key: b.key, label: b.label, count: 0 });
+    }
+    const now = Date.now();
+    let oldestMs = now;
+
+    for (const r of openRows) {
+      if (r.created_time) {
+        const t = new Date(r.created_time).getTime();
+        if (!isNaN(t)) {
+          if (t < oldestMs) oldestMs = t;
+          const days = Math.floor((now - t) / (1000 * 60 * 60 * 24));
+          const bucketKey = ageBucketFor(days);
+          if (ageMap.has(bucketKey)) {
+            ageMap.get(bucketKey).count++;
+          }
+        }
+      }
+    }
+
+    backlogByAge = Array.from(ageMap.values());
+    oldestDays = Math.floor((now - oldestMs) / (1000 * 60 * 60 * 24));
+  }
+
+  // Timestamp ultima sync open-tickets
+  const { data: syncStatus } = await supabase
+    .from("zoho_open_tickets_sync")
+    .select("count, last_synced_at")
+    .eq("source", "sviluppo")
+    .maybeSingle();
+
+  // Ticket riaperti nel periodo
+  const reopenedRows = rows.filter((r) => r.status === "Ticket Ri-Aperto");
+  const reopenedCount = reopenedRows.length;
+
+  // Distribuzione canale
+  const byChannel = new Map();
+  for (const r of rows) {
+    const c = r.channel || "(non specificato)";
+    if (!byChannel.has(c)) byChannel.set(c, { channel: c, count: 0 });
+    byChannel.get(c).count++;
+  }
+  const channels = Array.from(byChannel.values()).sort((a, b) => b.count - a.count);
+
+  // Distribuzione status
+  const byStatus2 = new Map();
+  for (const r of rows) {
+    const s = r.status || "(non specificato)";
+    if (!byStatus2.has(s)) {
+      byStatus2.set(s, { status: s, count: 0, is_open: false, is_closed: false });
+    }
+    const o = byStatus2.get(s);
+    o.count++;
+    o.is_open = SVILUPPO_OPEN_STATUSES.includes(s);
+    o.is_closed = SVILUPPO_CLOSED_STATUSES.includes(s);
+  }
+  const statuses = Array.from(byStatus2.values()).sort((a, b) => b.count - a.count);
+
+  // Top assignee (qui mostriamo TOTALI, non solo del periodo, perché interessa il carico complessivo)
+  const { data: allAssignees } = await supabase
+    .from("zoho_raw_sviluppo")
+    .select("assignee, status, closed_time")
+    .gte("created_time", fromIso)
+    .lte("created_time", toIso);
+
+  const byAssignee = new Map();
+  for (const r of (allAssignees ?? [])) {
+    const rawName = r.assignee;
+    const a = rawName ? normalizeOperatorName(rawName) : "(non assegnato)";
+    if (!byAssignee.has(a)) {
+      byAssignee.set(a, {
+        assignee: a,
+        tickets: 0,
+        closed: 0,
+        open: 0,
+      });
+    }
+    const o = byAssignee.get(a);
+    o.tickets++;
+    if (r.closed_time) o.closed++;
+    if (SVILUPPO_OPEN_STATUSES.includes(r.status)) o.open++;
+  }
+  const assignees = Array.from(byAssignee.values())
+    .map((o) => ({
+      ...o,
+      pct_closed: o.tickets > 0 ? o.closed / o.tickets : null,
+    }))
+    .sort((a, b) => b.tickets - a.tickets);
+
+  // Trend giornaliero
+  const { data: dailyRows } = await supabase
+    .from("zoho_daily_sviluppo")
+    .select("date, new_tickets, closed_tickets, backlog")
+    .gte("date", from)
+    .lte("date", to)
+    .order("date", { ascending: true });
+
+  const trend = (dailyRows ?? []).map((d) => ({
+    date: d.date,
+    new_tickets: asNum(d.new_tickets),
+    closed_tickets: asNum(d.closed_tickets),
+    backlog: asNum(d.backlog),
+  }));
+
+  return {
+    channels,
+    statuses,
+    assignees,
+    trend,
+    total_in_period: rows.length,
+    reopened_count: reopenedCount,
+    backlog: {
+      total: backlogTotal,
+      by_status: backlogByStatus,
+      by_age: backlogByAge,
+      oldest_days: oldestDays,
+      unassigned: openUnassignedCount,
+      last_synced_at: syncStatus?.last_synced_at ?? null,
+    },
+  };
+}
+
+function emptySviluppoDetails() {
+  return {
+    channels: [],
+    statuses: [],
+    assignees: [],
+    trend: [],
+    total_in_period: 0,
+    reopened_count: 0,
+    backlog: {
+      total: 0,
+      by_status: [],
+      by_age: [],
+      oldest_days: null,
+      unassigned: 0,
+      last_synced_at: null,
+    },
+  };
+}
   };
 }
