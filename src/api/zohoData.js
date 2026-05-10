@@ -549,6 +549,20 @@ function emptyFormazioneDetails() {
 const ASSISTENZA_OPEN_STATUSES = ["Aperto", "In attesa"];
 const ASSISTENZA_CLOSED_STATUSES = ["Chiuso", "Chiuso da Assistenza"];
 
+// Status del dipartimento Sviluppo (più ricco di Assistenza)
+const SVILUPPO_OPEN_STATUSES = [
+  "Ticket aperto",
+  "In attesa",
+  "Ticket Ri-Aperto",
+  "Passato a Assistenza per check",
+];
+const SVILUPPO_CLOSED_STATUSES = [
+  "Chiuso da Assistenza",
+  "Chiuso. Cliente informato",
+  "Chiuso. Ticket Risolto",
+  "Chiuso. Ticket Non Risolto",
+];
+
 /**
  * Restituisce dettagli estesi della tabella Assistenza per il periodo:
  *   - Distribuzione per canale (Chat / Email / Web ...)
