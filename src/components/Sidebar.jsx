@@ -18,7 +18,7 @@ export const NAV_ITEMS = [
   { key: "cruscotto",  label: "Cruscotto",     icon: LayoutDashboard, live: true  },
   { key: "chat",       label: "Reparto Chat",  icon: MessageSquare,   live: true  },
   { key: "formazione", label: "Formazione",    icon: GraduationCap,   live: true },
-  { key: "assistenza", label: "Assistenza",    icon: Headphones,      live: false },
+  { key: "assistenza", label: "Assistenza",    icon: Headphones,      live: true },
   { key: "sviluppo",   label: "Sviluppo",      icon: Code2,           live: false },
   { key: "report",     label: "Report",        icon: FileText,        live: false },
   { key: "timesheet",  label: "Timesheet",     icon: Calendar,        live: false },
