@@ -9,6 +9,7 @@ import LoadingOverlay from "./components/LoadingOverlay";
 import Cruscotto from "./pages/Cruscotto";
 import RepartoChat from "./pages/RepartoChat";
 import Formazione from "./pages/Formazione";
+import Assistenza from "./pages/Assistenza";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { useSyncStatus } from "./hooks/useSyncStatus";
 import { periodBounds, previousPeriod, yoyPeriod, formatPeriodLabel } from "./lib/periods";
@@ -75,13 +76,15 @@ function AppInner() {
     };
   }, [period.type, period.anchor.getTime()]);
 
-  // Extras dipendono dalla pagina attiva
   const extras = useMemo(() => {
     if (activePage === "chat") {
       return { heatmap: true, topVisitors: true };
     }
     if (activePage === "formazione") {
       return { formazioneDetails: true };
+    }
+    if (activePage === "assistenza") {
+      return { assistenzaDetails: true };
     }
     return {};
   }, [activePage]);
@@ -160,6 +163,8 @@ function PageContent({ activePage, data }) {
       return <RepartoChat data={data} />;
     case "formazione":
       return <Formazione data={data} />;
+    case "assistenza":
+      return <Assistenza data={data} />;
     default:
       return <Placeholder pageKey={activePage} />;
   }
