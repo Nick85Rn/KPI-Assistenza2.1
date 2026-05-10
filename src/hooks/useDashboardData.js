@@ -11,18 +11,13 @@ import {
   getTopVisitors,
   getFormazioneDetails,
   getAssistenzaDetails,
+  getSviluppoDetails,
 } from "../api/zohoData";
 
 /**
  * @param {Object} params
- * @param {Date}   params.start, params.end       - periodo corrente
- * @param {Date}   params.prevStart, params.prevEnd
- * @param {Date}   params.yoyStart, params.yoyEnd
- * @param {Object} params.extras                  - flags
- * @param {bool}   params.extras.heatmap
- * @param {bool}   params.extras.topVisitors
- * @param {bool}   params.extras.formazioneDetails
- * @param {bool}   params.extras.assistenzaDetails
+ * @param {Object} params.extras - flags
+ *   - heatmap, topVisitors, formazioneDetails, assistenzaDetails, sviluppoDetails
  */
 export function useDashboardData({
   start, end, prevStart, prevEnd, yoyStart, yoyEnd,
@@ -39,6 +34,7 @@ export function useDashboardData({
     topVisitors: null,
     formazioneDetails: null,
     assistenzaDetails: null,
+    sviluppoDetails: null,
   });
 
   const requestIdRef = useRef(0);
@@ -48,6 +44,7 @@ export function useDashboardData({
     topVisitors: !!extras.topVisitors,
     formazioneDetails: !!extras.formazioneDetails,
     assistenzaDetails: !!extras.assistenzaDetails,
+    sviluppoDetails: !!extras.sviluppoDetails,
   });
 
   const load = useCallback(async () => {
@@ -59,11 +56,6 @@ export function useDashboardData({
       const prev = (prevStart && prevEnd) ? { start: prevStart, end: prevEnd } : null;
       const yoy = (yoyStart && yoyEnd) ? { start: yoyStart, end: yoyEnd } : null;
 
-      const wantHeatmap = !!extras.heatmap;
-      const wantTopVisitors = !!extras.topVisitors;
-      const wantFormazione = !!extras.formazioneDetails;
-      const wantAssistenza = !!extras.assistenzaDetails;
-
       const [
         curAss, curSvi, curChat, curForm,
         prevAss, prevSvi, prevChat, prevForm,
@@ -73,6 +65,7 @@ export function useDashboardData({
         topVisitorsData,
         formazioneDetailsData,
         assistenzaDetailsData,
+        sviluppoDetailsData,
       ] = await Promise.all([
         getTicketKpis("assistenza", cur),
         getTicketKpis("sviluppo", cur),
@@ -87,10 +80,11 @@ export function useDashboardData({
         yoy ? getChatKpis(yoy)                  : Promise.resolve(null),
         yoy ? getFormazioneKpis(yoy)            : Promise.resolve(null),
         getLastSyncByPart(),
-        wantHeatmap ? getChatHeatmap(cur) : Promise.resolve(null),
-        wantTopVisitors ? getTopVisitors(cur, 10) : Promise.resolve(null),
-        wantFormazione ? getFormazioneDetails(cur) : Promise.resolve(null),
-        wantAssistenza ? getAssistenzaDetails(cur) : Promise.resolve(null),
+        extras.heatmap ? getChatHeatmap(cur) : Promise.resolve(null),
+        extras.topVisitors ? getTopVisitors(cur, 10) : Promise.resolve(null),
+        extras.formazioneDetails ? getFormazioneDetails(cur) : Promise.resolve(null),
+        extras.assistenzaDetails ? getAssistenzaDetails(cur) : Promise.resolve(null),
+        extras.sviluppoDetails ? getSviluppoDetails(cur) : Promise.resolve(null),
       ]);
 
       if (reqId !== requestIdRef.current) return;
@@ -98,29 +92,15 @@ export function useDashboardData({
       setState({
         loading: false,
         error: null,
-        current: {
-          assistenza: curAss,
-          sviluppo: curSvi,
-          chat: curChat,
-          formazione: curForm,
-        },
-        previous: prev ? {
-          assistenza: prevAss,
-          sviluppo: prevSvi,
-          chat: prevChat,
-          formazione: prevForm,
-        } : null,
-        yoy: yoy ? {
-          assistenza: yoyAss,
-          sviluppo: yoySvi,
-          chat: yoyChat,
-          formazione: yoyForm,
-        } : null,
+        current: { assistenza: curAss, sviluppo: curSvi, chat: curChat, formazione: curForm },
+        previous: prev ? { assistenza: prevAss, sviluppo: prevSvi, chat: prevChat, formazione: prevForm } : null,
+        yoy: yoy ? { assistenza: yoyAss, sviluppo: yoySvi, chat: yoyChat, formazione: yoyForm } : null,
         lastSync,
         heatmap: heatmapData,
         topVisitors: topVisitorsData,
         formazioneDetails: formazioneDetailsData,
         assistenzaDetails: assistenzaDetailsData,
+        sviluppoDetails: sviluppoDetailsData,
       });
     } catch (err) {
       if (reqId !== requestIdRef.current) return;
