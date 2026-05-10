@@ -1,7 +1,5 @@
 // src/api/zohoData.js
 // Layer di accesso ai dati Zoho via Supabase.
-// Query alle tabelle aggregate (zoho_daily_*) per i KPI principali e accesso
-// alle raw (zoho_raw_*) per drill-down e dettagli.
 
 import { supabase } from "../supabaseClient";
 
@@ -9,11 +7,6 @@ import { supabase } from "../supabaseClient";
 // HELPERS
 // ============================================================
 
-/**
- * Converte un Date in stringa YYYY-MM-DD nel timezone locale.
- * NB: in JS toISOString() converte sempre in UTC, ma noi vogliamo la data
- * locale dell'utente. Quindi ricostruiamo manualmente.
- */
 export function toYmd(d) {
   if (!(d instanceof Date)) return null;
   const y = d.getFullYear();
@@ -22,9 +15,6 @@ export function toYmd(d) {
   return `${y}-${m}-${day}`;
 }
 
-/**
- * Estrae from/to in formato YYYY-MM-DD da un periodo {start, end}.
- */
 function asDateRange(period) {
   return {
     from: toYmd(period.start),
@@ -32,31 +22,52 @@ function asDateRange(period) {
   };
 }
 
-/**
- * Conversione difensiva a numero. Tratta null/undefined/string come 0.
- */
 function asNum(v) {
   if (v == null) return 0;
   const n = Number(v);
   return isNaN(n) ? 0 : n;
 }
 
-// Lista delle "company" che in realtà sono categorie tecniche interne, non clienti veri.
-// Le mostriamo nei top con un tag "Interno".
 const INTERNAL_COMPANIES = new Set([
   "App Clienti Pienissimo PRO",
   "Test P.pro Assistenza",
 ]);
 
-/**
- * Estrae nome e P.IVA dal formato "IT12345678901 - NOME AZIENDA".
- */
 function splitCompanyName(raw) {
   if (!raw) return { name: "(senza nome)", vat: null };
   const m = raw.match(/^(IT\d{10,12})\s*[-–]\s*(.+)$/);
   if (m) return { name: m[2].trim(), vat: m[1] };
   return { name: raw.trim(), vat: null };
 }
+
+function normalizeOperatorName(name) {
+  if (!name) return name;
+  return name
+    .split(/\s+/)
+    .map((part) => {
+      if (!part) return part;
+      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    })
+    .join(" ")
+    .trim();
+}
+
+// Status reali per dipartimento (presi dai dati storici)
+const ASSISTENZA_OPEN_STATUSES = ["Aperto", "In attesa"];
+const ASSISTENZA_CLOSED_STATUSES = ["Chiuso", "Chiuso da Assistenza"];
+
+const SVILUPPO_OPEN_STATUSES = [
+  "Ticket aperto",
+  "In attesa",
+  "Ticket Ri-Aperto",
+  "Passato a Assistenza per check",
+];
+const SVILUPPO_CLOSED_STATUSES = [
+  "Chiuso da Assistenza",
+  "Chiuso. Cliente informato",
+  "Chiuso. Ticket Risolto",
+  "Chiuso. Ticket Non Risolto",
+];
 
 // ============================================================
 // PING
@@ -70,19 +81,14 @@ export async function pingSupabase() {
 }
 
 // ============================================================
-// TICKET KPIs (Assistenza / Sviluppo)
+// TICKET KPIs
 // ============================================================
 
-/**
- * @param {string} which - "assistenza" o "sviluppo"
- * @param {Object} period - {start, end} con Date
- */
 export async function getTicketKpis(which, period) {
   const tableName = which === "sviluppo" ? "zoho_daily_sviluppo" : "zoho_daily_assistenza";
   const rawTable = which === "sviluppo" ? "zoho_raw_sviluppo" : "zoho_raw_assistenza";
   const { from, to } = asDateRange(period);
 
-  // Daily aggregate per KPI principali
   const { data: daily, error: dailyErr } = await supabase
     .from(tableName)
     .select("date, new_tickets, closed_tickets, backlog")
@@ -104,7 +110,6 @@ export async function getTicketKpis(which, period) {
     if (asNum(row.backlog) > max_backlog) max_backlog = asNum(row.backlog);
   }
 
-  // SLA (medie sui ticket creati nel periodo)
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
 
@@ -165,7 +170,6 @@ export async function getChatKpis(period) {
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
 
-  // Vista già filtrata per chat valide (esclude ghost)
   const { data, error } = await supabase
     .from("vw_chats_valid")
     .select("operator, department, waiting_time_seconds, duration_seconds, created_time")
@@ -258,7 +262,7 @@ function emptyChatKpis() {
 }
 
 // ============================================================
-// FORMAZIONE KPIs (base)
+// FORMAZIONE KPIs
 // ============================================================
 
 export async function getFormazioneKpis(period) {
@@ -347,7 +351,7 @@ export async function getLastSyncByPart() {
 }
 
 // ============================================================
-// HEATMAP CHAT (7×24)
+// HEATMAP CHAT
 // ============================================================
 
 export async function getChatHeatmap(period) {
@@ -395,7 +399,7 @@ function emptyHeatmap() {
 }
 
 // ============================================================
-// TOP VISITATORI (clienti che chattano di più)
+// TOP VISITATORI CHAT
 // ============================================================
 
 export async function getTopVisitors(period, limit = 10) {
@@ -437,15 +441,9 @@ export async function getTopVisitors(period, limit = 10) {
 }
 
 // ============================================================
-// FORMAZIONE - DETTAGLI ESTESI
+// FORMAZIONE - DETTAGLI
 // ============================================================
 
-/**
- * Restituisce i dettagli estesi della formazione per il periodo:
- *   - top 10 clienti (per ore)
- *   - distribuzione per topic (le sessioni senza topic compaiono come "Tipologia non presente")
- *   - trend mensile (sessioni e ore per mese)
- */
 export async function getFormazioneDetails(period) {
   const { from, to } = asDateRange(period);
   const fromIso = `${from}T00:00:00`;
@@ -465,7 +463,6 @@ export async function getFormazioneDetails(period) {
   const rows = data ?? [];
   const NO_TOPIC_LABEL = "Tipologia non presente";
 
-  // ---- Top clienti ----
   const byCompany = new Map();
   for (const r of rows) {
     if (!r.company) continue;
@@ -489,7 +486,6 @@ export async function getFormazioneDetails(period) {
     .sort((a, b) => b.minutes - a.minutes)
     .slice(0, 10);
 
-  // ---- Distribuzione topic (incluse "non taggate") ----
   const byTopic = new Map();
   for (const r of rows) {
     const raw = (r.topic || "").trim();
@@ -512,7 +508,6 @@ export async function getFormazioneDetails(period) {
     return b.sessions - a.sessions;
   });
 
-  // ---- Trend mensile ----
   const byMonth = new Map();
   for (const r of rows) {
     if (!r.created_time) continue;
@@ -542,41 +537,17 @@ function emptyFormazioneDetails() {
     total_sessions: 0,
   };
 }
+
 // ============================================================
-// ASSISTENZA - DETTAGLI ESTESI (canali, status, assignee, trend)
+// ASSISTENZA - DETTAGLI ESTESI
 // ============================================================
 
-const ASSISTENZA_OPEN_STATUSES = ["Aperto", "In attesa"];
-const ASSISTENZA_CLOSED_STATUSES = ["Chiuso", "Chiuso da Assistenza"];
-
-// Status del dipartimento Sviluppo (più ricco di Assistenza)
-const SVILUPPO_OPEN_STATUSES = [
-  "Ticket aperto",
-  "In attesa",
-  "Ticket Ri-Aperto",
-  "Passato a Assistenza per check",
-];
-const SVILUPPO_CLOSED_STATUSES = [
-  "Chiuso da Assistenza",
-  "Chiuso. Cliente informato",
-  "Chiuso. Ticket Risolto",
-  "Chiuso. Ticket Non Risolto",
-];
-
-/**
- * Restituisce dettagli estesi della tabella Assistenza per il periodo:
- *   - Distribuzione per canale (Chat / Email / Web ...)
- *   - Distribuzione per status
- *   - Top assignee con metriche
- *   - Trend giornaliero (creati / chiusi / backlog)
- *   - Backlog corrente (totale ticket attualmente non chiusi)
- */
 export async function getAssistenzaDetails(period) {
   const { from, to } = asDateRange(period);
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
 
-  // ---- 1. Ticket creati nel periodo (per distribuzioni e trend) ----
+  // Ticket creati nel periodo
   const { data: createdRows, error: e1 } = await supabase
     .from("zoho_raw_assistenza")
     .select("ticket_id, status, channel, assignee, created_time, closed_time, first_response_sec, resolution_sec")
@@ -589,17 +560,50 @@ export async function getAssistenzaDetails(period) {
   }
   const rows = createdRows ?? [];
 
-  // ---- 2. Backlog corrente (ticket NON chiusi in totale) ----
-  const { count: backlogCount, error: e2 } = await supabase
+  // Backlog VIVO con breakdown per status
+  const { data: openRows, error: e2 } = await supabase
     .from("zoho_raw_assistenza")
-    .select("ticket_id", { count: "exact", head: true })
+    .select("status, created_time, assignee")
     .in("status", ASSISTENZA_OPEN_STATUSES);
 
-  if (e2) {
-    console.error("getAssistenzaDetails backlog:", e2.message);
+  let backlogTotal = 0;
+  let backlogByStatus = [];
+  let oldestDays = null;
+  let openUnassignedCount = 0;
+
+  if (!e2 && openRows) {
+    backlogTotal = openRows.length;
+
+    const byStatus = new Map();
+    for (const r of openRows) {
+      const s = r.status || "(none)";
+      if (!byStatus.has(s)) byStatus.set(s, 0);
+      byStatus.set(s, byStatus.get(s) + 1);
+      if (!r.assignee) openUnassignedCount++;
+    }
+    backlogByStatus = Array.from(byStatus.entries())
+      .map(([status, count]) => ({ status, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const now = Date.now();
+    let oldestMs = now;
+    for (const r of openRows) {
+      if (r.created_time) {
+        const t = new Date(r.created_time).getTime();
+        if (!isNaN(t) && t < oldestMs) oldestMs = t;
+      }
+    }
+    oldestDays = Math.floor((now - oldestMs) / (1000 * 60 * 60 * 24));
   }
 
-  // ---- Distribuzione canale ----
+  // Timestamp ultima sync open-tickets
+  const { data: syncStatus } = await supabase
+    .from("zoho_open_tickets_sync")
+    .select("count, last_synced_at")
+    .eq("source", "assistenza")
+    .maybeSingle();
+
+  // Distribuzione canale
   const byChannel = new Map();
   for (const r of rows) {
     const c = r.channel || "(non specificato)";
@@ -608,7 +612,7 @@ export async function getAssistenzaDetails(period) {
   }
   const channels = Array.from(byChannel.values()).sort((a, b) => b.count - a.count);
 
-  // ---- Distribuzione status ----
+  // Distribuzione status
   const byStatus = new Map();
   for (const r of rows) {
     const s = r.status || "(non specificato)";
@@ -620,7 +624,7 @@ export async function getAssistenzaDetails(period) {
   }
   const statuses = Array.from(byStatus.values()).sort((a, b) => b.count - a.count);
 
-  // ---- Top assignee ----
+  // Top assignee
   const byAssignee = new Map();
   for (const r of rows) {
     const rawName = r.assignee;
@@ -659,8 +663,7 @@ export async function getAssistenzaDetails(period) {
     }))
     .sort((a, b) => b.tickets - a.tickets);
 
-  // ---- Trend giornaliero ----
-  // Uso le tabelle aggregate giornaliere
+  // Trend giornaliero
   const { data: dailyRows } = await supabase
     .from("zoho_daily_assistenza")
     .select("date, new_tickets, closed_tickets, backlog")
@@ -681,7 +684,13 @@ export async function getAssistenzaDetails(period) {
     assignees,
     trend,
     total_in_period: rows.length,
-    backlog_total: backlogCount ?? 0,
+    backlog: {
+      total: backlogTotal,
+      by_status: backlogByStatus,
+      oldest_days: oldestDays,
+      unassigned: openUnassignedCount,
+      last_synced_at: syncStatus?.last_synced_at ?? null,
+    },
   };
 }
 
@@ -692,22 +701,12 @@ function emptyAssistenzaDetails() {
     assignees: [],
     trend: [],
     total_in_period: 0,
-    backlog_total: 0,
+    backlog: {
+      total: 0,
+      by_status: [],
+      oldest_days: null,
+      unassigned: 0,
+      last_synced_at: null,
+    },
   };
-}
-
-/**
- * Normalizza il nome operatore (capitalizzazione consistente).
- * Esempio: "margarita Giardi" -> "Margarita Giardi"
- */
-function normalizeOperatorName(name) {
-  if (!name) return name;
-  return name
-    .split(/\s+/)
-    .map((part) => {
-      if (!part) return part;
-      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
-    })
-    .join(" ")
-    .trim();
 }
