@@ -10,6 +10,7 @@ import Cruscotto from "./pages/Cruscotto";
 import RepartoChat from "./pages/RepartoChat";
 import Formazione from "./pages/Formazione";
 import Assistenza from "./pages/Assistenza";
+import Sviluppo from "./pages/Sviluppo";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { useSyncStatus } from "./hooks/useSyncStatus";
 import { periodBounds, previousPeriod, yoyPeriod, formatPeriodLabel } from "./lib/periods";
@@ -85,6 +86,9 @@ function AppInner() {
     }
     if (activePage === "assistenza") {
       return { assistenzaDetails: true };
+    }
+    if (activePage === "sviluppo") {
+      return { sviluppoDetails: true };
     }
     return {};
   }, [activePage]);
@@ -165,6 +169,8 @@ function PageContent({ activePage, data }) {
       return <Formazione data={data} />;
     case "assistenza":
       return <Assistenza data={data} />;
+    case "sviluppo":
+      return <Sviluppo data={data} />;
     default:
       return <Placeholder pageKey={activePage} />;
   }
