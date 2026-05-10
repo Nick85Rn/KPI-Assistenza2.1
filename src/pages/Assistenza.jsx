@@ -52,9 +52,8 @@ export default function Assistenza({ data }) {
   const statuses = Array.isArray(details?.statuses) ? details.statuses : [];
   const assignees = Array.isArray(details?.assignees) ? details.assignees : [];
   const trend = Array.isArray(details?.trend) ? details.trend : [];
-  const backlogTotal = details?.backlog_total ?? null;
+  const backlog = details?.backlog || null;
 
-  // % Risoluzione: chiusi/nuovi del periodo
   const pctResolution = cur.new_tickets > 0
     ? Math.min(cur.closed_tickets / cur.new_tickets, 1)
     : null;
@@ -67,12 +66,10 @@ export default function Assistenza({ data }) {
 
   return (
     <div className="space-y-8">
-      {/* Banner backlog VIVO (sempre lo stesso indipendentemente dal periodo) */}
-      {backlogTotal != null && (
-        <BacklogBanner count={backlogTotal} />
+      {backlog && backlog.total > 0 && (
+        <BacklogBanner backlog={backlog} />
       )}
 
-      {/* Sezione: KPI volumetrici */}
       <section>
         <SectionTitle
           title="Assistenza"
@@ -120,7 +117,6 @@ export default function Assistenza({ data }) {
         </div>
       </section>
 
-      {/* Sezione: SLA Performance */}
       <section>
         <SectionTitle
           title="Performance & SLA"
@@ -172,7 +168,6 @@ export default function Assistenza({ data }) {
         </div>
       </section>
 
-      {/* Sezione: Distribuzione canali */}
       {channels.length > 0 && (
         <section>
           <SectionTitle
@@ -183,7 +178,6 @@ export default function Assistenza({ data }) {
         </section>
       )}
 
-      {/* Sezione: Distribuzione status */}
       {statuses.length > 0 && (
         <section>
           <SectionTitle
@@ -194,7 +188,6 @@ export default function Assistenza({ data }) {
         </section>
       )}
 
-      {/* Sezione: Top assignee */}
       {assignees.length > 0 && (
         <section>
           <SectionTitle
@@ -205,7 +198,6 @@ export default function Assistenza({ data }) {
         </section>
       )}
 
-      {/* Sezione: Trend giornaliero */}
       {trend.length > 1 && (
         <section>
           <SectionTitle
@@ -223,37 +215,63 @@ export default function Assistenza({ data }) {
 // Sotto-componenti
 // =============================================================
 
-function BacklogBanner({ count }) {
+function BacklogBanner({ backlog }) {
+  const count = backlog.total;
+  const byStatus = Array.isArray(backlog.by_status) ? backlog.by_status : [];
   const isCritical = count > 30;
   const isWarning = count > 10;
+
+  const colorClasses = isCritical
+    ? { bg: "bg-red-50", border: "border-red-200", iconBg: "bg-red-100", iconColor: "text-red-700", label: "text-red-700", value: "text-red-900" }
+    : isWarning
+      ? { bg: "bg-amber-50", border: "border-amber-200", iconBg: "bg-amber-100", iconColor: "text-amber-700", label: "text-amber-700", value: "text-amber-900" }
+      : { bg: "bg-emerald-50", border: "border-emerald-200", iconBg: "bg-emerald-100", iconColor: "text-emerald-700", label: "text-emerald-700", value: "text-emerald-900" };
+
   return (
-    <div className={`border rounded-lg p-4 flex items-center gap-4
-      ${isCritical
-        ? "bg-red-50 border-red-200"
-        : isWarning
-          ? "bg-amber-50 border-amber-200"
-          : "bg-emerald-50 border-emerald-200"}`}
-    >
-      <div className={`p-3 rounded-full
-        ${isCritical
-          ? "bg-red-100 text-red-700"
-          : isWarning
-            ? "bg-amber-100 text-amber-700"
-            : "bg-emerald-100 text-emerald-700"}`}
-      >
-        <AlertTriangle size={22} />
-      </div>
-      <div className="flex-1">
-        <div className={`text-xs font-medium uppercase tracking-wider
-          ${isCritical ? "text-red-700" : isWarning ? "text-amber-700" : "text-emerald-700"}`}>
-          Ticket attualmente aperti
+    <div className={`border rounded-lg p-5 ${colorClasses.bg} ${colorClasses.border}`}>
+      <div className="flex items-start gap-4 flex-wrap">
+        <div className={`p-3 rounded-full ${colorClasses.iconBg} ${colorClasses.iconColor}`}>
+          <AlertTriangle size={22} />
         </div>
-        <div className={`text-2xl font-bold mt-0.5
-          ${isCritical ? "text-red-900" : isWarning ? "text-amber-900" : "text-emerald-900"}`}>
-          {formatNumber(count)} {count === 1 ? "ticket" : "ticket"} non chiusi
-        </div>
-        <div className="text-xs text-slate-600 mt-1">
-          Conteggio in tempo reale, indipendente dal periodo selezionato
+        <div className="flex-1 min-w-0">
+          <div className={`text-xs font-medium uppercase tracking-wider ${colorClasses.label}`}>
+            Backlog attuale (in tempo reale)
+          </div>
+          <div className={`text-3xl font-bold mt-1 ${colorClasses.value}`}>
+            {formatNumber(count)} <span className="text-base font-medium">ticket non chiusi</span>
+          </div>
+
+          {byStatus.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-3">
+              {byStatus.map((s) => (
+                <div
+                  key={s.status}
+                  className="flex items-center gap-2 bg-white/70 border border-slate-200 rounded-md px-2.5 py-1 text-xs"
+                >
+                  <span className="font-semibold tabular-nums">{formatNumber(s.count)}</span>
+                  <span className="text-slate-600">{s.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-slate-600">
+            {backlog.oldest_days != null && backlog.oldest_days > 0 && (
+              <div>
+                ⏳ Più vecchio: <strong>{backlog.oldest_days} giorni</strong>
+              </div>
+            )}
+            {backlog.unassigned > 0 && (
+              <div>
+                👤 Non assegnati: <strong>{formatNumber(backlog.unassigned)}</strong>
+              </div>
+            )}
+            {backlog.last_synced_at && (
+              <div className="text-slate-400">
+                Aggiornato: {new Date(backlog.last_synced_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -423,7 +441,6 @@ function AssigneeTable({ assignees }) {
 }
 
 function TrendTable({ trend }) {
-  // Mostro solo gli ultimi 30 giorni se sono di più
   const display = trend.slice(-30);
   const maxVal = Math.max(...display.map((t) => Math.max(t.new_tickets, t.closed_tickets)), 1);
 
