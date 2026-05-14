@@ -88,7 +88,7 @@ export function useSyncStatus() {
     }
 
     setRunning(false);
-    setLastRunAt(new Date().toISOString());
+    setLastRunAt(new Date());
 
     // Notifica al frontend di ricaricare i dati
     if (typeof onComplete === "function") {
