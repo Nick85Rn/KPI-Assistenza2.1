@@ -1,4 +1,4 @@
-// src/App.jsx — versione produzione con routing multi-pagina
+// src/App.jsx — versione produzione con routing multi-pagina + Report
 
 import { useState, useMemo, Component } from "react";
 import Sidebar, { NAV_ITEMS } from "./components/Sidebar";
@@ -11,6 +11,7 @@ import RepartoChat from "./pages/RepartoChat";
 import Formazione from "./pages/Formazione";
 import Assistenza from "./pages/Assistenza";
 import Sviluppo from "./pages/Sviluppo";
+import Report from "./pages/Report";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { useSyncStatus } from "./hooks/useSyncStatus";
 import { periodBounds, previousPeriod, yoyPeriod, formatPeriodLabel } from "./lib/periods";
@@ -78,18 +79,10 @@ function AppInner() {
   }, [period.type, period.anchor.getTime()]);
 
   const extras = useMemo(() => {
-    if (activePage === "chat") {
-      return { heatmap: true, topVisitors: true };
-    }
-    if (activePage === "formazione") {
-      return { formazioneDetails: true };
-    }
-    if (activePage === "assistenza") {
-      return { assistenzaDetails: true };
-    }
-    if (activePage === "sviluppo") {
-      return { sviluppoDetails: true };
-    }
+    if (activePage === "chat") return { heatmap: true, topVisitors: true };
+    if (activePage === "formazione") return { formazioneDetails: true };
+    if (activePage === "assistenza") return { assistenzaDetails: true };
+    if (activePage === "sviluppo") return { sviluppoDetails: true };
     return {};
   }, [activePage]);
 
@@ -99,7 +92,7 @@ function AppInner() {
   const lastSync = data.lastSync && typeof data.lastSync === "object" ? data.lastSync : {};
   const hasSyncInfo = Object.keys(lastSync).length > 0;
 
-  const showOverlay = !!data.loading && !!data.current;
+  const showOverlay = !!data.loading && !!data.current && activePage !== "report";
   const overlayLabel = sync.running
     ? "Sincronizzazione con Zoho in corso..."
     : "Aggiornamento dati...";
@@ -146,7 +139,12 @@ function AppInner() {
 
         <div className="flex-1 px-8 py-6">
           <ErrorBoundary>
-            <PageContent activePage={activePage} data={data} />
+            <PageContent
+              activePage={activePage}
+              data={data}
+              period={{ start: ranges.start, end: ranges.end, from: toIso(ranges.start), to: toIso(ranges.end) }}
+              periodType={period.type}
+            />
           </ErrorBoundary>
         </div>
       </main>
@@ -156,23 +154,20 @@ function AppInner() {
   );
 }
 
-function PageContent({ activePage, data }) {
+function PageContent({ activePage, data, period, periodType }) {
+  if (activePage === "report") {
+    return <Report period={period} periodType={periodType} />;
+  }
   if (data.loading && !data.current) {
     return <Loading size="lg" label="Caricamento dati Zoho..." />;
   }
   switch (activePage) {
-    case "cruscotto":
-      return <Cruscotto data={data} />;
-    case "chat":
-      return <RepartoChat data={data} />;
-    case "formazione":
-      return <Formazione data={data} />;
-    case "assistenza":
-      return <Assistenza data={data} />;
-    case "sviluppo":
-      return <Sviluppo data={data} />;
-    default:
-      return <Placeholder pageKey={activePage} />;
+    case "cruscotto":   return <Cruscotto data={data} />;
+    case "chat":        return <RepartoChat data={data} />;
+    case "formazione":  return <Formazione data={data} />;
+    case "assistenza":  return <Assistenza data={data} />;
+    case "sviluppo":    return <Sviluppo data={data} />;
+    default:            return <Placeholder pageKey={activePage} />;
   }
 }
 
@@ -200,6 +195,14 @@ function getMostRecentSync(lastSyncByPart) {
     }
   }
   return mostRecent ? formatRelative(mostRecent.iso) : "—";
+}
+
+function toIso(d) {
+  if (!(d instanceof Date)) return null;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 export default function App() {
