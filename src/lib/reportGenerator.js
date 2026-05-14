@@ -10,14 +10,14 @@ import { formatSeconds, formatMinutes, formatNumber, normalizeOperatorName } fro
 // ============================================================
 
 const COLORS = {
-  primary: [15, 23, 42],         // slate-900
-  secondary: [71, 85, 105],      // slate-600
-  accent: [59, 130, 246],        // blue-500
-  success: [16, 185, 129],       // emerald-500
-  warning: [245, 158, 11],       // amber-500
-  danger: [220, 38, 38],         // red-600
-  light: [241, 245, 249],        // slate-100
-  text: [30, 41, 59],            // slate-800
+  primary: [15, 23, 42],
+  secondary: [71, 85, 105],
+  accent: [59, 130, 246],
+  success: [16, 185, 129],
+  warning: [245, 158, 11],
+  danger: [220, 38, 38],
+  light: [241, 245, 249],
+  text: [30, 41, 59],
 };
 
 const MARGIN = 20;
@@ -38,7 +38,6 @@ function fmtPeriodLabel(period, periodType) {
   if (periodType === "year") {
     return `Anno ${fromD.getFullYear()}`;
   }
-  // Per settimana/trimestre/custom
   const fromStr = `${fromD.getDate()} ${months[fromD.getMonth()].slice(0,3).toLowerCase()}`;
   const toStr = `${toD.getDate()} ${months[toD.getMonth()].slice(0,3).toLowerCase()} ${toD.getFullYear()}`;
   return `${fromStr} - ${toStr}`;
@@ -105,11 +104,11 @@ export function generatePdf(reportData, periodType) {
 
   // ---- PUNTI DI ATTENZIONE ----
   if (reportData.attention_points && reportData.attention_points.length > 0) {
-    doc.setFillColor(254, 243, 199); // amber-100
+    doc.setFillColor(254, 243, 199);
     doc.rect(MARGIN, y, CONTENT_WIDTH, 8 + (reportData.attention_points.length * 5), "F");
 
     y += 6;
-    doc.setTextColor(146, 64, 14); // amber-800
+    doc.setTextColor(146, 64, 14);
     doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
     doc.text("Punti di attenzione", MARGIN + 3, y);
@@ -294,15 +293,8 @@ export function generatePdf(reportData, periodType) {
     doc.setPage(i);
     doc.setFontSize(7);
     doc.setTextColor(...COLORS.secondary);
-    doc.text(
-      "Fonte: Zoho Desk, Zoho SalesIQ, Zoho CRM",
-      MARGIN, 290
-    );
-    doc.text(
-      `Pagina ${i} di ${pageCount}`,
-      PAGE_WIDTH - MARGIN, 290,
-      { align: "right" }
-    );
+    doc.text("Fonte: Zoho Desk, Zoho SalesIQ, Zoho CRM", MARGIN, 290);
+    doc.text(`Pagina ${i} di ${pageCount}`, PAGE_WIDTH - MARGIN, 290, { align: "right" });
   }
 
   return doc;
@@ -399,4 +391,12 @@ export function generateEmailText(reportData, periodType) {
   return lines.join("\n");
 }
 
-// ============
+// ============================================================
+// DOWNLOAD PDF
+// ============================================================
+
+export function downloadPdf(reportData, periodType) {
+  const doc = generatePdf(reportData, periodType);
+  const filename = `Report_Pienissimo_${reportData.period.from}_${reportData.period.to}.pdf`;
+  doc.save(filename);
+}
