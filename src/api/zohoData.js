@@ -893,3 +893,104 @@ function emptySviluppoDetails() {
     },
   };
 }
+// ============================================================
+// REPORT - DATI AGGREGATI PER MANAGEMENT
+// ============================================================
+
+/**
+ * Aggrega TUTTI i dati di un periodo per generare il report.
+ * Restituisce un oggetto strutturato con:
+ *   - Volumi sintetici
+ *   - Sezione Assistenza (KPI + top operatori)
+ *   - Sezione Chat (KPI + top operatori)
+ *   - Sezione Formazione (KPI + top clienti)
+ *   - Sezione Sviluppo (KPI + backlog)
+ *   - Punti di attenzione (insight automatici)
+ */
+export async function getReportData(period) {
+  const { from, to } = asDateRange(period);
+
+  // Recupero in parallelo tutti i KPI principali
+  const [
+    assistenzaKpis,
+    sviluppoKpis,
+    chatKpis,
+    formazioneKpis,
+    assistenzaDetails,
+    sviluppoDetails,
+    formazioneDetails,
+  ] = await Promise.all([
+    getTicketKpis("assistenza", period),
+    getTicketKpis("sviluppo", period),
+    getChatKpis(period),
+    getFormazioneKpis(period),
+    getAssistenzaDetails(period),
+    getSviluppoDetails(period),
+    getFormazioneDetails(period),
+  ]);
+
+  // Costruisco insight automatici per i "punti di attenzione"
+  const attentionPoints = [];
+
+  // Backlog Sviluppo "abbandonato"
+  if (sviluppoDetails?.backlog?.by_age) {
+    const oldBuckets = sviluppoDetails.backlog.by_age.filter(
+      (b) => ["90-180", "180-365", "over-365"].includes(b.key)
+    );
+    const oldCount = oldBuckets.reduce((sum, b) => sum + b.count, 0);
+    if (oldCount > 0) {
+      attentionPoints.push(
+        `Backlog Sviluppo: ${sviluppoDetails.backlog.total} ticket aperti, ` +
+        `di cui ${oldCount} fermi da oltre 90 giorni`
+      );
+    }
+  }
+
+  // Ticket Assistenza non assegnati
+  if (assistenzaDetails?.backlog?.unassigned > 0) {
+    attentionPoints.push(
+      `${assistenzaDetails.backlog.unassigned} ticket Assistenza non assegnati al momento`
+    );
+  }
+
+  // Ticket Assistenza vecchi
+  if (assistenzaDetails?.backlog?.oldest_days > 30) {
+    attentionPoints.push(
+      `Ticket Assistenza più vecchio aperto da ${assistenzaDetails.backlog.oldest_days} giorni`
+    );
+  }
+
+  // Ticket riaperti Sviluppo
+  if (sviluppoDetails?.reopened_count > 0) {
+    attentionPoints.push(
+      `${sviluppoDetails.reopened_count} ticket Sviluppo riaperti nel periodo (qualità risoluzione)`
+    );
+  }
+
+  return {
+    period: { from, to },
+    generated_at: new Date().toISOString(),
+    assistenza: {
+      ...assistenzaKpis,
+      top_operators: assistenzaDetails?.assignees?.slice(0, 5) ?? [],
+      channels: assistenzaDetails?.channels ?? [],
+      backlog_current: assistenzaDetails?.backlog ?? null,
+    },
+    sviluppo: {
+      ...sviluppoKpis,
+      top_operators: sviluppoDetails?.assignees?.slice(0, 5) ?? [],
+      backlog_current: sviluppoDetails?.backlog ?? null,
+      reopened_count: sviluppoDetails?.reopened_count ?? 0,
+    },
+    chat: {
+      ...chatKpis,
+      top_operators: chatKpis?.operators?.slice(0, 5) ?? [],
+    },
+    formazione: {
+      ...formazioneKpis,
+      top_clients: formazioneDetails?.top_clients?.slice(0, 5) ?? [],
+      topics_count: formazioneDetails?.topics?.length ?? 0,
+    },
+    attention_points: attentionPoints,
+  };
+}
