@@ -1,5 +1,5 @@
 // src/hooks/useDashboardData.js
-// Hook unificato: dato un periodo, restituisce TUTTI i dati della dashboard.
+// Hook unificato + auto-refresh del backlog ogni 2 minuti.
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
@@ -14,11 +14,8 @@ import {
   getSviluppoDetails,
 } from "../api/zohoData";
 
-/**
- * @param {Object} params
- * @param {Object} params.extras - flags
- *   - heatmap, topVisitors, formazioneDetails, assistenzaDetails, sviluppoDetails
- */
+const BACKLOG_POLL_INTERVAL_MS = 120000; // 2 minuti
+
 export function useDashboardData({
   start, end, prevStart, prevEnd, yoyStart, yoyEnd,
   extras = {},
@@ -38,6 +35,7 @@ export function useDashboardData({
   });
 
   const requestIdRef = useRef(0);
+  const backlogIntervalRef = useRef(null);
 
   const extrasKey = JSON.stringify({
     heatmap: !!extras.heatmap,
@@ -118,9 +116,56 @@ export function useDashboardData({
     extrasKey,
   ]);
 
+  // Funzione di refresh SOLO del backlog (leggera, no full reload)
+  const refreshBacklog = useCallback(async () => {
+    if (!extras.assistenzaDetails && !extras.sviluppoDetails) return;
+
+    try {
+      const cur = { start, end };
+      const [assistenzaDetailsData, sviluppoDetailsData] = await Promise.all([
+        extras.assistenzaDetails ? getAssistenzaDetails(cur) : Promise.resolve(null),
+        extras.sviluppoDetails ? getSviluppoDetails(cur) : Promise.resolve(null),
+      ]);
+
+      setState((s) => ({
+        ...s,
+        assistenzaDetails: assistenzaDetailsData ?? s.assistenzaDetails,
+        sviluppoDetails: sviluppoDetailsData ?? s.sviluppoDetails,
+      }));
+    } catch (err) {
+      console.warn("refreshBacklog failed (silenzioso):", err.message);
+    }
+  }, [
+    start?.getTime(), end?.getTime(),
+    extras.assistenzaDetails, extras.sviluppoDetails,
+  ]);
+
   useEffect(() => {
     load();
   }, [load]);
+
+  // Polling backlog
+  useEffect(() => {
+    if (!extras.assistenzaDetails && !extras.sviluppoDetails) return;
+
+    // Pulisci interval precedente
+    if (backlogIntervalRef.current) {
+      clearInterval(backlogIntervalRef.current);
+    }
+
+    backlogIntervalRef.current = setInterval(() => {
+      // Salta se la tab non è visibile (risparmia richieste)
+      if (document.visibilityState === "visible") {
+        refreshBacklog();
+      }
+    }, BACKLOG_POLL_INTERVAL_MS);
+
+    return () => {
+      if (backlogIntervalRef.current) {
+        clearInterval(backlogIntervalRef.current);
+      }
+    };
+  }, [refreshBacklog, extras.assistenzaDetails, extras.sviluppoDetails]);
 
   const refresh = useCallback(() => load(), [load]);
 
