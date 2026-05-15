@@ -296,7 +296,8 @@ export async function getFormazioneKpis(period) {
     return emptyFormazioneKpis();
   }
 
-  const rows = data ?? [];
+  // Filtro: escludi sessioni <5min (tap accidentali, test)
+  const rows = (data ?? []).filter((r) => asNum(r.duration_minutes) >= 5);
   const total_records = rows.length;
   let total_minutes = 0;
   const byOp = new Map();
@@ -464,7 +465,7 @@ export async function getFormazioneDetails(period) {
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
 
-  const { data, error } = await supabase
+const { data, error } = await supabase
     .from("zoho_raw_formazione")
     .select("company, topic, duration_minutes, created_time")
     .gte("created_time", fromIso)
@@ -474,6 +475,9 @@ export async function getFormazioneDetails(period) {
     console.error("getFormazioneDetails:", error.message);
     return emptyFormazioneDetails();
   }
+
+  // Filtro: escludi sessioni <5min
+  const rows = (data ?? []).filter((r) => asNum(r.duration_minutes) >= 5);
 
   const rows = data ?? [];
   const NO_TOPIC_LABEL = "Tipologia non presente";
