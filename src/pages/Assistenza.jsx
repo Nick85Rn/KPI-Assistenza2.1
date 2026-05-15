@@ -216,10 +216,14 @@ export default function Assistenza({ data }) {
 // =============================================================
 
 function BacklogBanner({ backlog }) {
-  const count = backlog.total;
+  // Usa real_count se disponibile, fallback a total
+  const realCount = backlog.real_count ?? backlog.total;
+  const noiseCount = backlog.noise_count ?? 0;
+  const totalCount = backlog.total;
   const byStatus = Array.isArray(backlog.by_status) ? backlog.by_status : [];
-  const isCritical = count > 30;
-  const isWarning = count > 10;
+
+  const isCritical = realCount > 30;
+  const isWarning = realCount > 10;
 
   const colorClasses = isCritical
     ? { bg: "bg-red-50", border: "border-red-200", iconBg: "bg-red-100", iconColor: "text-red-700", label: "text-red-700", value: "text-red-900" }
@@ -238,8 +242,15 @@ function BacklogBanner({ backlog }) {
             Backlog attuale (in tempo reale)
           </div>
           <div className={`text-3xl font-bold mt-1 ${colorClasses.value}`}>
-            {formatNumber(count)} <span className="text-base font-medium">ticket non chiusi</span>
+            {formatNumber(realCount)} <span className="text-base font-medium">ticket reali aperti</span>
           </div>
+
+          {/* Mostra il count "rumore" se presente */}
+          {noiseCount > 0 && (
+            <div className="text-xs text-slate-500 mt-1">
+              + {formatNumber(noiseCount)} chat "saluto" auto-create (esclusi dal conteggio)
+            </div>
+          )}
 
           {byStatus.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-3">
@@ -264,6 +275,7 @@ function BacklogBanner({ backlog }) {
             {backlog.unassigned > 0 && (
               <div>
                 👤 Non assegnati: <strong>{formatNumber(backlog.unassigned)}</strong>
+                <span className="text-slate-400 ml-1">(totale grezzo: {formatNumber(totalCount)})</span>
               </div>
             )}
             {backlog.last_synced_at && (
