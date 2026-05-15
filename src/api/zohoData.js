@@ -574,12 +574,16 @@ export async function getAssistenzaDetails(period) {
   }
   const rows = createdRows ?? [];
 
+  // Backlog VIVO con breakdown per status + filtro "ticket reali"
+  // Carichiamo ANCHE subject e thread_count per identificare i saluti
   const { data: openRows, error: e2 } = await supabase
     .from("zoho_raw_assistenza")
-    .select("status, created_time, assignee")
+    .select("status, created_time, assignee, subject, thread_count")
     .in("status", ASSISTENZA_OPEN_STATUSES);
 
-  let backlogTotal = 0;
+  let backlogTotal = 0;        // count grezzo (tutti i ticket aperti)
+  let backlogRealCount = 0;    // count "reali" (esclusi saluti)
+  let backlogNoiseCount = 0;   // count "rumore" (saluti auto-creati)
   let backlogByStatus = [];
   let oldestDays = null;
   let openUnassignedCount = 0;
@@ -588,25 +592,46 @@ export async function getAssistenzaDetails(period) {
     backlogTotal = openRows.length;
 
     const byStatus = new Map();
+    let oldestMs = Date.now();
+    const realRows = [];
+
     for (const r of openRows) {
       const s = r.status || "(none)";
       if (!byStatus.has(s)) byStatus.set(s, 0);
       byStatus.set(s, byStatus.get(s) + 1);
       if (!r.assignee) openUnassignedCount++;
-    }
-    backlogByStatus = Array.from(byStatus.entries())
-      .map(([status, count]) => ({ status, count }))
-      .sort((a, b) => b.count - a.count);
 
-    const now = Date.now();
-    let oldestMs = now;
-    for (const r of openRows) {
-      if (r.created_time) {
+      // Classifica come "saluto" se: subject corto + no assignee + thread<=1
+      const subject = (r.subject || "").trim();
+      const isShortSubject = subject.length < 30;
+      const noAssignee = !r.assignee;
+      const noResponse = !r.thread_count || r.thread_count <= 1;
+      const isNoise = isShortSubject && noAssignee && noResponse;
+
+      if (isNoise) {
+        backlogNoiseCount++;
+      } else {
+        backlogRealCount++;
+        realRows.push(r);
+      }
+
+      // Più vecchio: consideriamo solo i ticket "reali"
+      if (!isNoise && r.created_time) {
         const t = new Date(r.created_time).getTime();
         if (!isNaN(t) && t < oldestMs) oldestMs = t;
       }
     }
-    oldestDays = Math.floor((now - oldestMs) / (1000 * 60 * 60 * 24));
+
+    backlogByStatus = Array.from(byStatus.entries())
+      .map(([status, count]) => ({ status, count }))
+      .sort((a, b) => b.count - a.count);
+
+    // oldestDays calcolato solo sui ticket reali
+    if (realRows.length > 0) {
+      oldestDays = Math.floor((Date.now() - oldestMs) / (1000 * 60 * 60 * 24));
+    } else {
+      oldestDays = null;
+    }
   }
 
   const { data: syncStatus } = await supabase
@@ -686,14 +711,16 @@ export async function getAssistenzaDetails(period) {
     backlog: asNum(d.backlog),
   }));
 
-  return {
+return {
     channels,
     statuses,
     assignees,
     trend,
     total_in_period: rows.length,
     backlog: {
-      total: backlogTotal,
+      total: backlogTotal,                  // grezzo
+      real_count: backlogRealCount,         // "veri" ticket
+      noise_count: backlogNoiseCount,       // saluti auto-creati
       by_status: backlogByStatus,
       oldest_days: oldestDays,
       unassigned: openUnassignedCount,
