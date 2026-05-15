@@ -557,14 +557,15 @@ function emptyFormazioneDetails() {
 // ASSISTENZA - DETTAGLI ESTESI
 // ============================================================
 
-export async function getAssistenzaDetails(period) {
+export async function export async function getAssistenzaDetails(period) {
   const { from, to } = asDateRange(period);
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
 
-  const { data: createdRows, error: e1 } = await supabase
+  // 1. Ticket creati nel periodo (caricati TUTTI per fare anche la conta saluti)
+  const { data: createdRowsAll, error: e1 } = await supabase
     .from("zoho_raw_assistenza")
-    .select("ticket_id, status, channel, assignee, created_time, closed_time, first_response_sec, resolution_sec")
+    .select("ticket_id, subject, thread_count, status, channel, assignee, created_time, closed_time, first_response_sec, resolution_sec")
     .gte("created_time", fromIso)
     .lte("created_time", toIso);
 
@@ -572,18 +573,29 @@ export async function getAssistenzaDetails(period) {
     console.error("getAssistenzaDetails created:", e1.message);
     return emptyAssistenzaDetails();
   }
-  const rows = createdRows ?? [];
+  const allCreatedRows = createdRowsAll ?? [];
 
-  // Backlog VIVO con breakdown per status + filtro "ticket reali"
-  // Carichiamo ANCHE subject e thread_count per identificare i saluti
+  // Filtra i ticket "reali" (esclude saluti auto-creati)
+  // Saluto = subject corto + no assignee + thread <= 1
+  const isNoise = (r) => {
+    const subject = (r.subject || "").trim();
+    return subject.length < 30 
+      && !r.assignee 
+      && (!r.thread_count || r.thread_count <= 1);
+  };
+
+  const rows = allCreatedRows.filter((r) => !isNoise(r));
+  const noiseInPeriod = allCreatedRows.length - rows.length;
+
+  // 2. Backlog VIVO (solo ticket reali)
   const { data: openRows, error: e2 } = await supabase
     .from("zoho_raw_assistenza")
     .select("status, created_time, assignee, subject, thread_count")
     .in("status", ASSISTENZA_OPEN_STATUSES);
 
-  let backlogTotal = 0;        // count grezzo (tutti i ticket aperti)
-  let backlogRealCount = 0;    // count "reali" (esclusi saluti)
-  let backlogNoiseCount = 0;   // count "rumore" (saluti auto-creati)
+  let backlogTotal = 0;
+  let backlogRealCount = 0;
+  let backlogNoiseCount = 0;
   let backlogByStatus = [];
   let oldestDays = null;
   let openUnassignedCount = 0;
@@ -601,22 +613,15 @@ export async function getAssistenzaDetails(period) {
       byStatus.set(s, byStatus.get(s) + 1);
       if (!r.assignee) openUnassignedCount++;
 
-      // Classifica come "saluto" se: subject corto + no assignee + thread<=1
-      const subject = (r.subject || "").trim();
-      const isShortSubject = subject.length < 30;
-      const noAssignee = !r.assignee;
-      const noResponse = !r.thread_count || r.thread_count <= 1;
-      const isNoise = isShortSubject && noAssignee && noResponse;
-
-      if (isNoise) {
+      const noise = isNoise(r);
+      if (noise) {
         backlogNoiseCount++;
       } else {
         backlogRealCount++;
         realRows.push(r);
       }
 
-      // Più vecchio: consideriamo solo i ticket "reali"
-      if (!isNoise && r.created_time) {
+      if (!noise && r.created_time) {
         const t = new Date(r.created_time).getTime();
         if (!isNaN(t) && t < oldestMs) oldestMs = t;
       }
@@ -626,7 +631,6 @@ export async function getAssistenzaDetails(period) {
       .map(([status, count]) => ({ status, count }))
       .sort((a, b) => b.count - a.count);
 
-    // oldestDays calcolato solo sui ticket reali
     if (realRows.length > 0) {
       oldestDays = Math.floor((Date.now() - oldestMs) / (1000 * 60 * 60 * 24));
     } else {
@@ -634,12 +638,14 @@ export async function getAssistenzaDetails(period) {
     }
   }
 
+  // 3. Timestamp ultima sync open-tickets
   const { data: syncStatus } = await supabase
     .from("zoho_open_tickets_sync")
     .select("count, last_synced_at")
     .eq("source", "assistenza")
     .maybeSingle();
 
+  // Distribuzione canale (sui ticket REALI del periodo)
   const byChannel = new Map();
   for (const r of rows) {
     const c = r.channel || "(non specificato)";
@@ -648,6 +654,7 @@ export async function getAssistenzaDetails(period) {
   }
   const channels = Array.from(byChannel.values()).sort((a, b) => b.count - a.count);
 
+  // Distribuzione status (sui ticket REALI del periodo)
   const byStatus2 = new Map();
   for (const r of rows) {
     const s = r.status || "(non specificato)";
@@ -659,6 +666,7 @@ export async function getAssistenzaDetails(period) {
   }
   const statuses = Array.from(byStatus2.values()).sort((a, b) => b.count - a.count);
 
+  // Top assignee (sui ticket REALI del periodo)
   const byAssignee = new Map();
   for (const r of rows) {
     const rawName = r.assignee;
@@ -697,6 +705,7 @@ export async function getAssistenzaDetails(period) {
     }))
     .sort((a, b) => b.tickets - a.tickets);
 
+  // Trend giornaliero (le daily sono GIÀ filtrate dal recompute SQL)
   const { data: dailyRows } = await supabase
     .from("zoho_daily_assistenza")
     .select("date, new_tickets, closed_tickets, backlog")
@@ -711,16 +720,17 @@ export async function getAssistenzaDetails(period) {
     backlog: asNum(d.backlog),
   }));
 
-return {
+  return {
     channels,
     statuses,
     assignees,
     trend,
     total_in_period: rows.length,
+    noise_in_period: noiseInPeriod,
     backlog: {
-      total: backlogTotal,                  // grezzo
-      real_count: backlogRealCount,         // "veri" ticket
-      noise_count: backlogNoiseCount,       // saluti auto-creati
+      total: backlogTotal,
+      real_count: backlogRealCount,
+      noise_count: backlogNoiseCount,
       by_status: backlogByStatus,
       oldest_days: oldestDays,
       unassigned: openUnassignedCount,
