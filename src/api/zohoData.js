@@ -1035,3 +1035,135 @@ export async function getReportData(period) {
     attention_points: attentionPoints,
   };
 }
+
+// ============================================================
+// ANALISI CHAT - DATI AGGREGATI POST-CATEGORIZZAZIONE LLM
+// ============================================================
+
+/**
+ * Restituisce dati aggregati delle chat categorizzate dal LLM.
+ * Le chat senza category sono escluse (non ancora processate).
+ */
+export async function getChatAnalysisData(period) {
+  const { from, to } = asDateRange(period);
+  const fromIso = `${from}T00:00:00`;
+  const toIso = `${to}T23:59:59`;
+
+  // Carica tutte le chat categorizzate del periodo
+  const { data, error } = await supabase
+    .from("zoho_raw_chats")
+    .select("chat_id, category, subcategory, sentiment, resolved, created_time, operator, visitor_name")
+    .gte("created_time", fromIso)
+    .lte("created_time", toIso)
+    .not("category", "is", null);
+
+  if (error) {
+    console.error("getChatAnalysisData:", error.message);
+    return emptyChatAnalysis();
+  }
+
+  const rows = data ?? [];
+  const total = rows.length;
+
+  if (total === 0) return emptyChatAnalysis();
+
+  // Distribuzione categorie
+  const byCategory = new Map();
+  let urgentTotal = 0, negativeTotal = 0, unresolvedTotal = 0;
+
+  for (const r of rows) {
+    const cat = r.category || "Altro";
+    if (!byCategory.has(cat)) {
+      byCategory.set(cat, {
+        category: cat,
+        total: 0,
+        urgent: 0,
+        negative: 0,
+        unresolved: 0,
+        positive: 0,
+        resolved: 0,
+      });
+    }
+    const o = byCategory.get(cat);
+    o.total++;
+    if (r.sentiment === "urgente") { o.urgent++; urgentTotal++; }
+    if (r.sentiment === "negativo") { o.negative++; negativeTotal++; }
+    if (r.sentiment === "positivo") o.positive++;
+    if (r.resolved === false) { o.unresolved++; unresolvedTotal++; }
+    if (r.resolved === true) o.resolved++;
+  }
+
+  const categories = Array.from(byCategory.values())
+    .map((c) => ({
+      ...c,
+      pct: total > 0 ? (c.total / total) * 100 : 0,
+      pct_urgent: c.total > 0 ? (c.urgent / c.total) * 100 : 0,
+      pct_unresolved: c.total > 0 ? (c.unresolved / c.total) * 100 : 0,
+    }))
+    .sort((a, b) => b.total - a.total);
+
+  // Top subcategorie problematiche (chat con sentiment urgente/negativo o non risolte)
+  const bySubcategory = new Map();
+  for (const r of rows) {
+    if (!r.subcategory) continue;
+    const key = `${r.category}::${r.subcategory}`;
+    if (!bySubcategory.has(key)) {
+      bySubcategory.set(key, {
+        category: r.category,
+        subcategory: r.subcategory,
+        total: 0,
+        urgent: 0,
+        unresolved: 0,
+      });
+    }
+    const o = bySubcategory.get(key);
+    o.total++;
+    if (r.sentiment === "urgente") o.urgent++;
+    if (r.resolved === false) o.unresolved++;
+  }
+  const topSubcategories = Array.from(bySubcategory.values())
+    .filter((s) => s.total >= 5) // Almeno 5 occorrenze
+    .sort((a, b) => (b.urgent + b.unresolved) - (a.urgent + a.unresolved))
+    .slice(0, 20);
+
+  // Trend mensile per categoria
+  const byMonth = new Map();
+  for (const r of rows) {
+    if (!r.created_time) continue;
+    const d = new Date(r.created_time);
+    if (isNaN(d.getTime())) continue;
+    const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const key = `${month}::${r.category}`;
+    if (!byMonth.has(key)) byMonth.set(key, { month, category: r.category, count: 0 });
+    byMonth.get(key).count++;
+  }
+  const trend = Array.from(byMonth.values()).sort((a, b) => a.month.localeCompare(b.month));
+
+  return {
+    total,
+    urgent_total: urgentTotal,
+    negative_total: negativeTotal,
+    unresolved_total: unresolvedTotal,
+    pct_urgent: total > 0 ? (urgentTotal / total) * 100 : 0,
+    pct_unresolved: total > 0 ? (unresolvedTotal / total) * 100 : 0,
+    pct_negative: total > 0 ? (negativeTotal / total) * 100 : 0,
+    categories,
+    top_subcategories: topSubcategories,
+    trend,
+  };
+}
+
+function emptyChatAnalysis() {
+  return {
+    total: 0,
+    urgent_total: 0,
+    negative_total: 0,
+    unresolved_total: 0,
+    pct_urgent: 0,
+    pct_unresolved: 0,
+    pct_negative: 0,
+    categories: [],
+    top_subcategories: [],
+    trend: [],
+  };
+}
