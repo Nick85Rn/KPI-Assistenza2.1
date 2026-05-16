@@ -561,7 +561,7 @@ function emptyFormazioneDetails() {
 // ASSISTENZA - DETTAGLI ESTESI
 // ============================================================
 
-export async function export async function getAssistenzaDetails(period) {
+export async function getAssistenzaDetails(period) {
   const { from, to } = asDateRange(period);
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
