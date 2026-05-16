@@ -1,4 +1,4 @@
-// src/App.jsx — versione produzione con routing multi-pagina + Report
+// src/App.jsx — versione produzione con routing multi-pagina + AnalisiChat
 
 import { useState, useMemo, Component } from "react";
 import Sidebar, { NAV_ITEMS } from "./components/Sidebar";
@@ -11,6 +11,7 @@ import RepartoChat from "./pages/RepartoChat";
 import Formazione from "./pages/Formazione";
 import Assistenza from "./pages/Assistenza";
 import Sviluppo from "./pages/Sviluppo";
+import AnalisiChat from "./pages/AnalisiChat";
 import Report from "./pages/Report";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { useSyncStatus } from "./hooks/useSyncStatus";
@@ -72,9 +73,9 @@ function AppInner() {
     const prev = previousPeriod(period.type, period.anchor);
     const yoy = yoyPeriod(period.type, period.anchor);
     return {
-      start: cur.start,    end: cur.end,
+      start: cur.start, end: cur.end,
       prevStart: prev.start, prevEnd: prev.end,
-      yoyStart: yoy.start,   yoyEnd: yoy.end,
+      yoyStart: yoy.start, yoyEnd: yoy.end,
     };
   }, [period.type, period.anchor.getTime()]);
 
@@ -83,6 +84,7 @@ function AppInner() {
     if (activePage === "formazione") return { formazioneDetails: true };
     if (activePage === "assistenza") return { assistenzaDetails: true };
     if (activePage === "sviluppo") return { sviluppoDetails: true };
+    if (activePage === "analisi-chat") return { chatAnalysis: true };
     return {};
   }, [activePage]);
 
@@ -162,12 +164,13 @@ function PageContent({ activePage, data, period, periodType }) {
     return <Loading size="lg" label="Caricamento dati Zoho..." />;
   }
   switch (activePage) {
-    case "cruscotto":   return <Cruscotto data={data} />;
-    case "chat":        return <RepartoChat data={data} />;
-    case "formazione":  return <Formazione data={data} />;
-    case "assistenza":  return <Assistenza data={data} />;
-    case "sviluppo":    return <Sviluppo data={data} />;
-    default:            return <Placeholder pageKey={activePage} />;
+    case "cruscotto":     return <Cruscotto data={data} />;
+    case "chat":          return <RepartoChat data={data} />;
+    case "formazione":    return <Formazione data={data} />;
+    case "assistenza":    return <Assistenza data={data} />;
+    case "sviluppo":      return <Sviluppo data={data} />;
+    case "analisi-chat":  return <AnalisiChat data={data} />;
+    default:              return <Placeholder pageKey={activePage} />;
   }
 }
 
