@@ -1,5 +1,5 @@
 // src/api/zohoData.js
-// Layer di accesso ai dati Zoho via Supabase.
+// Layer di accesso ai dati Zoho via Supabase - Dashboard 2.0
 
 import { supabase } from "../supabaseClient";
 
@@ -16,10 +16,7 @@ export function toYmd(d) {
 }
 
 function asDateRange(period) {
-  return {
-    from: toYmd(period.start),
-    to: toYmd(period.end),
-  };
+  return { from: toYmd(period.start), to: toYmd(period.end) };
 }
 
 function asNum(v) {
@@ -56,25 +53,20 @@ const ASSISTENZA_OPEN_STATUSES = ["Aperto", "In attesa"];
 const ASSISTENZA_CLOSED_STATUSES = ["Chiuso", "Chiuso da Assistenza"];
 
 const SVILUPPO_OPEN_STATUSES = [
-  "Ticket aperto",
-  "In attesa",
-  "Ticket Ri-Aperto",
-  "Passato a Assistenza per check",
+  "Ticket aperto", "In attesa", "Ticket Ri-Aperto", "Passato a Assistenza per check",
 ];
 const SVILUPPO_CLOSED_STATUSES = [
-  "Chiuso da Assistenza",
-  "Chiuso. Cliente informato",
-  "Chiuso. Ticket Risolto",
-  "Chiuso. Ticket Non Risolto",
+  "Chiuso da Assistenza", "Chiuso. Cliente informato",
+  "Chiuso. Ticket Risolto", "Chiuso. Ticket Non Risolto",
 ];
 
 const SVI_AGE_BUCKETS = [
-  { key: "0-7",       label: "0-7 giorni",     min: 0,    max: 7 },
-  { key: "7-30",      label: "7-30 giorni",    min: 7,    max: 30 },
-  { key: "30-90",     label: "30-90 giorni",   min: 30,   max: 90 },
-  { key: "90-180",    label: "90-180 giorni",  min: 90,   max: 180 },
-  { key: "180-365",   label: "180gg-1 anno",   min: 180,  max: 365 },
-  { key: "over-365",  label: "Oltre 1 anno",   min: 365,  max: Infinity },
+  { key: "0-7",      label: "0-7 giorni",    min: 0,   max: 7 },
+  { key: "7-30",     label: "7-30 giorni",   min: 7,   max: 30 },
+  { key: "30-90",    label: "30-90 giorni",  min: 30,  max: 90 },
+  { key: "90-180",   label: "90-180 giorni", min: 90,  max: 180 },
+  { key: "180-365",  label: "180gg-1 anno",  min: 180, max: 365 },
+  { key: "over-365", label: "Oltre 1 anno",  min: 365, max: Infinity },
 ];
 
 function ageBucketFor(daysOld) {
@@ -82,6 +74,14 @@ function ageBucketFor(daysOld) {
     if (daysOld >= b.min && daysOld < b.max) return b.key;
   }
   return "over-365";
+}
+
+// Filtro "saluti" per assistenza
+function isAssistenzaNoise(r) {
+  const subject = (r.subject || "").trim();
+  return subject.length < 30 
+    && !r.assignee 
+    && (!r.thread_count || r.thread_count <= 1);
 }
 
 // ============================================================
@@ -107,8 +107,7 @@ export async function getTicketKpis(which, period) {
   const { data: daily, error: dailyErr } = await supabase
     .from(tableName)
     .select("date, new_tickets, closed_tickets, backlog")
-    .gte("date", from)
-    .lte("date", to)
+    .gte("date", from).lte("date", to)
     .order("date", { ascending: true });
 
   if (dailyErr) {
@@ -116,9 +115,7 @@ export async function getTicketKpis(which, period) {
     return emptyTicketKpis();
   }
 
-  let new_tickets = 0;
-  let closed_tickets = 0;
-  let max_backlog = 0;
+  let new_tickets = 0, closed_tickets = 0, max_backlog = 0;
   for (const row of daily ?? []) {
     new_tickets += asNum(row.new_tickets);
     closed_tickets += asNum(row.closed_tickets);
@@ -128,17 +125,23 @@ export async function getTicketKpis(which, period) {
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
 
-  const { data: slaRows } = await supabase
+  // SLA: per Assistenza filtro saluti, per Sviluppo no
+  let slaQuery = supabase
     .from(rawTable)
-    .select("first_response_sec, avg_response_sec, resolution_sec")
-    .gte("created_time", fromIso)
-    .lte("created_time", toIso)
+    .select("first_response_sec, avg_response_sec, resolution_sec, subject, assignee, thread_count")
+    .gte("created_time", fromIso).lte("created_time", toIso)
     .not("first_response_sec", "is", null);
+
+  const { data: slaRows } = await slaQuery;
+  const filtered = (slaRows ?? []).filter((r) => {
+    if (which === "assistenza") return !isAssistenzaNoise(r);
+    return true;
+  });
 
   let sumFirst = 0, sumResp = 0, sumRes = 0;
   let countFirst = 0, countResp = 0, countRes = 0;
 
-  for (const r of slaRows ?? []) {
+  for (const r of filtered) {
     if (r.first_response_sec != null) {
       sumFirst += asNum(r.first_response_sec);
       countFirst++;
@@ -154,9 +157,7 @@ export async function getTicketKpis(which, period) {
   }
 
   return {
-    new_tickets,
-    closed_tickets,
-    max_backlog,
+    new_tickets, closed_tickets, max_backlog,
     avg_first_response_sec: countFirst > 0 ? Math.round(sumFirst / countFirst) : null,
     avg_response_sec: countResp > 0 ? Math.round(sumResp / countResp) : null,
     avg_resolution_sec: countRes > 0 ? Math.round(sumRes / countRes) : null,
@@ -166,12 +167,8 @@ export async function getTicketKpis(which, period) {
 
 function emptyTicketKpis() {
   return {
-    new_tickets: 0,
-    closed_tickets: 0,
-    max_backlog: 0,
-    avg_first_response_sec: null,
-    avg_response_sec: null,
-    avg_resolution_sec: null,
+    new_tickets: 0, closed_tickets: 0, max_backlog: 0,
+    avg_first_response_sec: null, avg_response_sec: null, avg_resolution_sec: null,
     sla_sample_size: 0,
   };
 }
@@ -188,8 +185,7 @@ export async function getChatKpis(period) {
   const { data, error } = await supabase
     .from("vw_chats_valid")
     .select("operator, department, waiting_time_seconds, duration_seconds, created_time")
-    .gte("created_time", fromIso)
-    .lte("created_time", toIso);
+    .gte("created_time", fromIso).lte("created_time", toIso);
 
   if (error) {
     console.error("getChatKpis:", error.message);
@@ -198,12 +194,9 @@ export async function getChatKpis(period) {
 
   const rows = data ?? [];
   const chats_total = rows.length;
-
-  let chats_attended = 0;
-  let chats_missed = 0;
+  let chats_attended = 0, chats_missed = 0;
   let sumWait = 0, countWait = 0;
   let sumDur = 0, countDur = 0;
-
   const byOp = new Map();
 
   for (const r of rows) {
@@ -224,41 +217,31 @@ export async function getChatKpis(period) {
       const opKey = r.operator;
       if (!byOp.has(opKey)) {
         byOp.set(opKey, {
-          operator: opKey,
-          chats: 0, attended: 0, missed: 0,
-          _sumWait: 0, _countWait: 0,
-          _sumDur: 0, _countDur: 0,
+          operator: opKey, chats: 0, attended: 0, missed: 0,
+          _sumWait: 0, _countWait: 0, _sumDur: 0, _countDur: 0,
         });
       }
       const o = byOp.get(opKey);
-      o.chats++;
-      o.attended++;
+      o.chats++; o.attended++;
       if (r.waiting_time_seconds != null && r.waiting_time_seconds > 0) {
-        o._sumWait += asNum(r.waiting_time_seconds);
-        o._countWait++;
+        o._sumWait += asNum(r.waiting_time_seconds); o._countWait++;
       }
       if (r.duration_seconds != null && r.duration_seconds > 0) {
-        o._sumDur += asNum(r.duration_seconds);
-        o._countDur++;
+        o._sumDur += asNum(r.duration_seconds); o._countDur++;
       }
     }
   }
 
   const operators = Array.from(byOp.values())
     .map((o) => ({
-      operator: o.operator,
-      chats: o.chats,
-      attended: o.attended,
-      missed: o.missed,
+      operator: o.operator, chats: o.chats, attended: o.attended, missed: o.missed,
       avg_wait_sec: o._countWait > 0 ? Math.round(o._sumWait / o._countWait) : null,
       avg_duration_sec: o._countDur > 0 ? Math.round(o._sumDur / o._countDur) : null,
     }))
     .sort((a, b) => b.chats - a.chats);
 
   return {
-    chats_total,
-    chats_attended,
-    chats_missed,
+    chats_total, chats_attended, chats_missed,
     avg_waiting_sec: countWait > 0 ? Math.round(sumWait / countWait) : null,
     avg_duration_sec: countDur > 0 ? Math.round(sumDur / countDur) : null,
     operators,
@@ -267,12 +250,8 @@ export async function getChatKpis(period) {
 
 function emptyChatKpis() {
   return {
-    chats_total: 0,
-    chats_attended: 0,
-    chats_missed: 0,
-    avg_waiting_sec: null,
-    avg_duration_sec: null,
-    operators: [],
+    chats_total: 0, chats_attended: 0, chats_missed: 0,
+    avg_waiting_sec: null, avg_duration_sec: null, operators: [],
   };
 }
 
@@ -288,15 +267,14 @@ export async function getFormazioneKpis(period) {
   const { data, error } = await supabase
     .from("zoho_raw_formazione")
     .select("operator, duration_minutes, created_time")
-    .gte("created_time", fromIso)
-    .lte("created_time", toIso);
+    .gte("created_time", fromIso).lte("created_time", toIso);
 
   if (error) {
     console.error("getFormazioneKpis:", error.message);
     return emptyFormazioneKpis();
   }
 
-  // Filtro: escludi sessioni <5min (tap accidentali, test)
+  // Filtro: escludi sessioni <5min
   const rows = (data ?? []).filter((r) => asNum(r.duration_minutes) >= 5);
   const total_records = rows.length;
   let total_minutes = 0;
@@ -310,33 +288,18 @@ export async function getFormazioneKpis(period) {
         byOp.set(r.operator, { operator: r.operator, count: 0, minutes: 0 });
       }
       const o = byOp.get(r.operator);
-      o.count++;
-      o.minutes += dur;
+      o.count++; o.minutes += dur;
     }
   }
 
-  const operators = Array.from(byOp.values())
-    .sort((a, b) => b.minutes - a.minutes);
+  const operators = Array.from(byOp.values()).sort((a, b) => b.minutes - a.minutes);
+  const avg_duration_min = total_records > 0 ? Math.round(total_minutes / total_records) : null;
 
-  const avg_duration_min = total_records > 0
-    ? Math.round(total_minutes / total_records)
-    : null;
-
-  return {
-    total_records,
-    total_minutes,
-    avg_duration_min,
-    operators,
-  };
+  return { total_records, total_minutes, avg_duration_min, operators };
 }
 
 function emptyFormazioneKpis() {
-  return {
-    total_records: 0,
-    total_minutes: 0,
-    avg_duration_min: null,
-    operators: [],
-  };
+  return { total_records: 0, total_minutes: 0, avg_duration_min: null, operators: [] };
 }
 
 // ============================================================
@@ -347,10 +310,8 @@ export async function getLastSyncByPart() {
   const { data, error } = await supabase
     .from("zoho_sync_log")
     .select("source, status, finished_at, records_synced")
-    .eq("status", "success")
-    .not("finished_at", "is", null)
-    .order("finished_at", { ascending: false })
-    .limit(50);
+    .eq("status", "success").not("finished_at", "is", null)
+    .order("finished_at", { ascending: false }).limit(50);
 
   if (error) {
     console.error("getLastSyncByPart:", error.message);
@@ -359,9 +320,7 @@ export async function getLastSyncByPart() {
 
   const result = {};
   for (const row of data ?? []) {
-    if (!result[row.source]) {
-      result[row.source] = row;
-    }
+    if (!result[row.source]) result[row.source] = row;
   }
   return result;
 }
@@ -372,12 +331,10 @@ export async function getLastSyncByPart() {
 
 export async function getChatHeatmap(period) {
   const { from, to } = asDateRange(period);
-
   const { data, error } = await supabase
     .from("zoho_chat_heatmap")
     .select("day_of_week, hour_of_day, chats_count, attended_count")
-    .gte("date", from)
-    .lte("date", to);
+    .gte("date", from).lte("date", to);
 
   if (error) {
     console.error("getChatHeatmap:", error.message);
@@ -387,13 +344,10 @@ export async function getChatHeatmap(period) {
   const grid = Array.from({ length: 7 }, () =>
     Array.from({ length: 24 }, () => ({ chats: 0, attended: 0 })),
   );
-
-  let totalChats = 0;
-  let maxCellChats = 0;
+  let totalChats = 0, maxCellChats = 0;
 
   for (const row of data ?? []) {
-    const d = row.day_of_week;
-    const h = row.hour_of_day;
+    const d = row.day_of_week, h = row.hour_of_day;
     if (d < 0 || d > 6 || h < 0 || h > 23) continue;
     grid[d][h].chats += asNum(row.chats_count);
     grid[d][h].attended += asNum(row.attended_count);
@@ -409,8 +363,7 @@ function emptyHeatmap() {
     grid: Array.from({ length: 7 }, () =>
       Array.from({ length: 24 }, () => ({ chats: 0, attended: 0 })),
     ),
-    totalChats: 0,
-    maxCellChats: 0,
+    totalChats: 0, maxCellChats: 0,
   };
 }
 
@@ -426,8 +379,7 @@ export async function getTopVisitors(period, limit = 10) {
   const { data, error } = await supabase
     .from("zoho_raw_chats")
     .select("visitor_name, created_time, operator, duration_seconds")
-    .gte("created_time", fromIso)
-    .lte("created_time", toIso)
+    .gte("created_time", fromIso).lte("created_time", toIso)
     .not("visitor_name", "is", null);
 
   if (error) {
@@ -452,8 +404,7 @@ export async function getTopVisitors(period, limit = 10) {
   }
 
   return Array.from(byVisitor.values())
-    .sort((a, b) => b.chats - a.chats)
-    .slice(0, limit);
+    .sort((a, b) => b.chats - a.chats).slice(0, limit);
 }
 
 // ============================================================
@@ -465,11 +416,10 @@ export async function getFormazioneDetails(period) {
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
 
-const { data, error } = await supabase
+  const { data, error } = await supabase
     .from("zoho_raw_formazione")
     .select("company, topic, duration_minutes, created_time")
-    .gte("created_time", fromIso)
-    .lte("created_time", toIso);
+    .gte("created_time", fromIso).lte("created_time", toIso);
 
   if (error) {
     console.error("getFormazioneDetails:", error.message);
@@ -478,8 +428,6 @@ const { data, error } = await supabase
 
   // Filtro: escludi sessioni <5min
   const rows = (data ?? []).filter((r) => asNum(r.duration_minutes) >= 5);
-
-  const rows = data ?? [];
   const NO_TOPIC_LABEL = "Tipologia non presente";
 
   const byCompany = new Map();
@@ -489,37 +437,26 @@ const { data, error } = await supabase
     if (!byCompany.has(key)) {
       const { name, vat } = splitCompanyName(key);
       byCompany.set(key, {
-        company: key,
-        name,
-        vat,
+        company: key, name, vat,
         is_internal: INTERNAL_COMPANIES.has(key),
-        sessions: 0,
-        minutes: 0,
+        sessions: 0, minutes: 0,
       });
     }
     const o = byCompany.get(key);
-    o.sessions += 1;
-    o.minutes += asNum(r.duration_minutes);
+    o.sessions += 1; o.minutes += asNum(r.duration_minutes);
   }
   const topClients = Array.from(byCompany.values())
-    .sort((a, b) => b.minutes - a.minutes)
-    .slice(0, 10);
+    .sort((a, b) => b.minutes - a.minutes).slice(0, 10);
 
   const byTopic = new Map();
   for (const r of rows) {
     const raw = (r.topic || "").trim();
     const t = raw || NO_TOPIC_LABEL;
     if (!byTopic.has(t)) {
-      byTopic.set(t, {
-        topic: t,
-        sessions: 0,
-        minutes: 0,
-        is_untagged: t === NO_TOPIC_LABEL,
-      });
+      byTopic.set(t, { topic: t, sessions: 0, minutes: 0, is_untagged: t === NO_TOPIC_LABEL });
     }
     const o = byTopic.get(t);
-    o.sessions += 1;
-    o.minutes += asNum(r.duration_minutes);
+    o.sessions += 1; o.minutes += asNum(r.duration_minutes);
   }
   const topics = Array.from(byTopic.values()).sort((a, b) => {
     if (a.is_untagged && !b.is_untagged) return 1;
@@ -535,26 +472,15 @@ const { data, error } = await supabase
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     if (!byMonth.has(key)) byMonth.set(key, { month: key, sessions: 0, minutes: 0 });
     const o = byMonth.get(key);
-    o.sessions += 1;
-    o.minutes += asNum(r.duration_minutes);
+    o.sessions += 1; o.minutes += asNum(r.duration_minutes);
   }
   const trend = Array.from(byMonth.values()).sort((a, b) => a.month.localeCompare(b.month));
 
-  return {
-    top_clients: topClients,
-    topics,
-    trend,
-    total_sessions: rows.length,
-  };
+  return { top_clients: topClients, topics, trend, total_sessions: rows.length };
 }
 
 function emptyFormazioneDetails() {
-  return {
-    top_clients: [],
-    topics: [],
-    trend: [],
-    total_sessions: 0,
-  };
+  return { top_clients: [], topics: [], trend: [], total_sessions: 0 };
 }
 
 // ============================================================
@@ -566,47 +492,29 @@ export async function getAssistenzaDetails(period) {
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
 
-  // 1. Ticket creati nel periodo (caricati TUTTI per fare anche la conta saluti)
   const { data: createdRowsAll, error: e1 } = await supabase
     .from("zoho_raw_assistenza")
     .select("ticket_id, subject, thread_count, status, channel, assignee, created_time, closed_time, first_response_sec, resolution_sec")
-    .gte("created_time", fromIso)
-    .lte("created_time", toIso);
+    .gte("created_time", fromIso).lte("created_time", toIso);
 
   if (e1) {
     console.error("getAssistenzaDetails created:", e1.message);
     return emptyAssistenzaDetails();
   }
   const allCreatedRows = createdRowsAll ?? [];
-
-  // Filtra i ticket "reali" (esclude saluti auto-creati)
-  // Saluto = subject corto + no assignee + thread <= 1
-  const isNoise = (r) => {
-    const subject = (r.subject || "").trim();
-    return subject.length < 30 
-      && !r.assignee 
-      && (!r.thread_count || r.thread_count <= 1);
-  };
-
-  const rows = allCreatedRows.filter((r) => !isNoise(r));
+  const rows = allCreatedRows.filter((r) => !isAssistenzaNoise(r));
   const noiseInPeriod = allCreatedRows.length - rows.length;
 
-  // 2. Backlog VIVO (solo ticket reali)
   const { data: openRows, error: e2 } = await supabase
     .from("zoho_raw_assistenza")
     .select("status, created_time, assignee, subject, thread_count")
     .in("status", ASSISTENZA_OPEN_STATUSES);
 
-  let backlogTotal = 0;
-  let backlogRealCount = 0;
-  let backlogNoiseCount = 0;
-  let backlogByStatus = [];
-  let oldestDays = null;
-  let openUnassignedCount = 0;
+  let backlogTotal = 0, backlogRealCount = 0, backlogNoiseCount = 0;
+  let backlogByStatus = [], oldestDays = null, openUnassignedCount = 0;
 
   if (!e2 && openRows) {
     backlogTotal = openRows.length;
-
     const byStatus = new Map();
     let oldestMs = Date.now();
     const realRows = [];
@@ -617,14 +525,13 @@ export async function getAssistenzaDetails(period) {
       byStatus.set(s, byStatus.get(s) + 1);
       if (!r.assignee) openUnassignedCount++;
 
-      const noise = isNoise(r);
+      const noise = isAssistenzaNoise(r);
       if (noise) {
         backlogNoiseCount++;
       } else {
         backlogRealCount++;
         realRows.push(r);
       }
-
       if (!noise && r.created_time) {
         const t = new Date(r.created_time).getTime();
         if (!isNaN(t) && t < oldestMs) oldestMs = t;
@@ -642,14 +549,10 @@ export async function getAssistenzaDetails(period) {
     }
   }
 
-  // 3. Timestamp ultima sync open-tickets
   const { data: syncStatus } = await supabase
     .from("zoho_open_tickets_sync")
-    .select("count, last_synced_at")
-    .eq("source", "assistenza")
-    .maybeSingle();
+    .select("count, last_synced_at").eq("source", "assistenza").maybeSingle();
 
-  // Distribuzione canale (sui ticket REALI del periodo)
   const byChannel = new Map();
   for (const r of rows) {
     const c = r.channel || "(non specificato)";
@@ -658,7 +561,6 @@ export async function getAssistenzaDetails(period) {
   }
   const channels = Array.from(byChannel.values()).sort((a, b) => b.count - a.count);
 
-  // Distribuzione status (sui ticket REALI del periodo)
   const byStatus2 = new Map();
   for (const r of rows) {
     const s = r.status || "(non specificato)";
@@ -670,51 +572,32 @@ export async function getAssistenzaDetails(period) {
   }
   const statuses = Array.from(byStatus2.values()).sort((a, b) => b.count - a.count);
 
-  // Top assignee (sui ticket REALI del periodo)
   const byAssignee = new Map();
   for (const r of rows) {
-    const rawName = r.assignee;
-    const a = rawName ? normalizeOperatorName(rawName) : "(non assegnato)";
+    const a = r.assignee ? normalizeOperatorName(r.assignee) : "(non assegnato)";
     if (!byAssignee.has(a)) {
       byAssignee.set(a, {
-        assignee: a,
-        tickets: 0,
-        closed: 0,
-        _sumFirst: 0,
-        _countFirst: 0,
-        _sumRes: 0,
-        _countRes: 0,
+        assignee: a, tickets: 0, closed: 0,
+        _sumFirst: 0, _countFirst: 0, _sumRes: 0, _countRes: 0,
       });
     }
     const o = byAssignee.get(a);
     o.tickets++;
     if (r.closed_time) o.closed++;
-    if (r.first_response_sec != null) {
-      o._sumFirst += asNum(r.first_response_sec);
-      o._countFirst++;
-    }
-    if (r.resolution_sec != null) {
-      o._sumRes += asNum(r.resolution_sec);
-      o._countRes++;
-    }
+    if (r.first_response_sec != null) { o._sumFirst += asNum(r.first_response_sec); o._countFirst++; }
+    if (r.resolution_sec != null) { o._sumRes += asNum(r.resolution_sec); o._countRes++; }
   }
-  const assignees = Array.from(byAssignee.values())
-    .map((o) => ({
-      assignee: o.assignee,
-      tickets: o.tickets,
-      closed: o.closed,
-      pct_closed: o.tickets > 0 ? o.closed / o.tickets : null,
-      avg_first_response_sec: o._countFirst > 0 ? Math.round(o._sumFirst / o._countFirst) : null,
-      avg_resolution_sec: o._countRes > 0 ? Math.round(o._sumRes / o._countRes) : null,
-    }))
-    .sort((a, b) => b.tickets - a.tickets);
+  const assignees = Array.from(byAssignee.values()).map((o) => ({
+    assignee: o.assignee, tickets: o.tickets, closed: o.closed,
+    pct_closed: o.tickets > 0 ? o.closed / o.tickets : null,
+    avg_first_response_sec: o._countFirst > 0 ? Math.round(o._sumFirst / o._countFirst) : null,
+    avg_resolution_sec: o._countRes > 0 ? Math.round(o._sumRes / o._countRes) : null,
+  })).sort((a, b) => b.tickets - a.tickets);
 
-  // Trend giornaliero (le daily sono GIÀ filtrate dal recompute SQL)
   const { data: dailyRows } = await supabase
     .from("zoho_daily_assistenza")
     .select("date, new_tickets, closed_tickets, backlog")
-    .gte("date", from)
-    .lte("date", to)
+    .gte("date", from).lte("date", to)
     .order("date", { ascending: true });
 
   const trend = (dailyRows ?? []).map((d) => ({
@@ -725,18 +608,11 @@ export async function getAssistenzaDetails(period) {
   }));
 
   return {
-    channels,
-    statuses,
-    assignees,
-    trend,
-    total_in_period: rows.length,
-    noise_in_period: noiseInPeriod,
+    channels, statuses, assignees, trend,
+    total_in_period: rows.length, noise_in_period: noiseInPeriod,
     backlog: {
-      total: backlogTotal,
-      real_count: backlogRealCount,
-      noise_count: backlogNoiseCount,
-      by_status: backlogByStatus,
-      oldest_days: oldestDays,
+      total: backlogTotal, real_count: backlogRealCount, noise_count: backlogNoiseCount,
+      by_status: backlogByStatus, oldest_days: oldestDays,
       unassigned: openUnassignedCount,
       last_synced_at: syncStatus?.last_synced_at ?? null,
     },
@@ -745,18 +621,9 @@ export async function getAssistenzaDetails(period) {
 
 function emptyAssistenzaDetails() {
   return {
-    channels: [],
-    statuses: [],
-    assignees: [],
-    trend: [],
-    total_in_period: 0,
-    backlog: {
-      total: 0,
-      by_status: [],
-      oldest_days: null,
-      unassigned: 0,
-      last_synced_at: null,
-    },
+    channels: [], statuses: [], assignees: [], trend: [],
+    total_in_period: 0, noise_in_period: 0,
+    backlog: { total: 0, real_count: 0, noise_count: 0, by_status: [], oldest_days: null, unassigned: 0, last_synced_at: null },
   };
 }
 
@@ -772,8 +639,7 @@ export async function getSviluppoDetails(period) {
   const { data: createdRows, error: e1 } = await supabase
     .from("zoho_raw_sviluppo")
     .select("ticket_id, status, channel, assignee, created_time, closed_time, first_response_sec, resolution_sec")
-    .gte("created_time", fromIso)
-    .lte("created_time", toIso);
+    .gte("created_time", fromIso).lte("created_time", toIso);
 
   if (e1) {
     console.error("getSviluppoDetails created:", e1.message);
@@ -786,11 +652,8 @@ export async function getSviluppoDetails(period) {
     .select("status, created_time, assignee")
     .in("status", SVILUPPO_OPEN_STATUSES);
 
-  let backlogTotal = 0;
-  let backlogByStatus = [];
-  let backlogByAge = [];
-  let oldestDays = null;
-  let openUnassignedCount = 0;
+  let backlogTotal = 0, backlogByStatus = [], backlogByAge = [];
+  let oldestDays = null, openUnassignedCount = 0;
 
   if (!e2 && openRows) {
     backlogTotal = openRows.length;
@@ -819,9 +682,7 @@ export async function getSviluppoDetails(period) {
           if (t < oldestMs) oldestMs = t;
           const days = Math.floor((now - t) / (1000 * 60 * 60 * 24));
           const bucketKey = ageBucketFor(days);
-          if (ageMap.has(bucketKey)) {
-            ageMap.get(bucketKey).count++;
-          }
+          if (ageMap.has(bucketKey)) ageMap.get(bucketKey).count++;
         }
       }
     }
@@ -832,9 +693,7 @@ export async function getSviluppoDetails(period) {
 
   const { data: syncStatus } = await supabase
     .from("zoho_open_tickets_sync")
-    .select("count, last_synced_at")
-    .eq("source", "sviluppo")
-    .maybeSingle();
+    .select("count, last_synced_at").eq("source", "sviluppo").maybeSingle();
 
   const reopenedRows = rows.filter((r) => r.status === "Ticket Ri-Aperto");
   const reopenedCount = reopenedRows.length;
@@ -850,9 +709,7 @@ export async function getSviluppoDetails(period) {
   const byStatus2 = new Map();
   for (const r of rows) {
     const s = r.status || "(non specificato)";
-    if (!byStatus2.has(s)) {
-      byStatus2.set(s, { status: s, count: 0, is_open: false, is_closed: false });
-    }
+    if (!byStatus2.has(s)) byStatus2.set(s, { status: s, count: 0, is_open: false, is_closed: false });
     const o = byStatus2.get(s);
     o.count++;
     o.is_open = SVILUPPO_OPEN_STATUSES.includes(s);
@@ -862,15 +719,9 @@ export async function getSviluppoDetails(period) {
 
   const byAssignee = new Map();
   for (const r of rows) {
-    const rawName = r.assignee;
-    const a = rawName ? normalizeOperatorName(rawName) : "(non assegnato)";
+    const a = r.assignee ? normalizeOperatorName(r.assignee) : "(non assegnato)";
     if (!byAssignee.has(a)) {
-      byAssignee.set(a, {
-        assignee: a,
-        tickets: 0,
-        closed: 0,
-        open: 0,
-      });
+      byAssignee.set(a, { assignee: a, tickets: 0, closed: 0, open: 0 });
     }
     const o = byAssignee.get(a);
     o.tickets++;
@@ -878,17 +729,13 @@ export async function getSviluppoDetails(period) {
     if (SVILUPPO_OPEN_STATUSES.includes(r.status)) o.open++;
   }
   const assignees = Array.from(byAssignee.values())
-    .map((o) => ({
-      ...o,
-      pct_closed: o.tickets > 0 ? o.closed / o.tickets : null,
-    }))
+    .map((o) => ({ ...o, pct_closed: o.tickets > 0 ? o.closed / o.tickets : null }))
     .sort((a, b) => b.tickets - a.tickets);
 
   const { data: dailyRows } = await supabase
     .from("zoho_daily_sviluppo")
     .select("date, new_tickets, closed_tickets, backlog")
-    .gte("date", from)
-    .lte("date", to)
+    .gte("date", from).lte("date", to)
     .order("date", { ascending: true });
 
   const trend = (dailyRows ?? []).map((d) => ({
@@ -899,18 +746,11 @@ export async function getSviluppoDetails(period) {
   }));
 
   return {
-    channels,
-    statuses,
-    assignees,
-    trend,
-    total_in_period: rows.length,
-    reopened_count: reopenedCount,
+    channels, statuses, assignees, trend,
+    total_in_period: rows.length, reopened_count: reopenedCount,
     backlog: {
-      total: backlogTotal,
-      by_status: backlogByStatus,
-      by_age: backlogByAge,
-      oldest_days: oldestDays,
-      unassigned: openUnassignedCount,
+      total: backlogTotal, by_status: backlogByStatus, by_age: backlogByAge,
+      oldest_days: oldestDays, unassigned: openUnassignedCount,
       last_synced_at: syncStatus?.last_synced_at ?? null,
     },
   };
@@ -918,121 +758,9 @@ export async function getSviluppoDetails(period) {
 
 function emptySviluppoDetails() {
   return {
-    channels: [],
-    statuses: [],
-    assignees: [],
-    trend: [],
-    total_in_period: 0,
-    reopened_count: 0,
-    backlog: {
-      total: 0,
-      by_status: [],
-      by_age: [],
-      oldest_days: null,
-      unassigned: 0,
-      last_synced_at: null,
-    },
-  };
-}
-// ============================================================
-// REPORT - DATI AGGREGATI PER MANAGEMENT
-// ============================================================
-
-/**
- * Aggrega TUTTI i dati di un periodo per generare il report.
- * Restituisce un oggetto strutturato con:
- *   - Volumi sintetici
- *   - Sezione Assistenza (KPI + top operatori)
- *   - Sezione Chat (KPI + top operatori)
- *   - Sezione Formazione (KPI + top clienti)
- *   - Sezione Sviluppo (KPI + backlog)
- *   - Punti di attenzione (insight automatici)
- */
-export async function getReportData(period) {
-  const { from, to } = asDateRange(period);
-
-  // Recupero in parallelo tutti i KPI principali
-  const [
-    assistenzaKpis,
-    sviluppoKpis,
-    chatKpis,
-    formazioneKpis,
-    assistenzaDetails,
-    sviluppoDetails,
-    formazioneDetails,
-  ] = await Promise.all([
-    getTicketKpis("assistenza", period),
-    getTicketKpis("sviluppo", period),
-    getChatKpis(period),
-    getFormazioneKpis(period),
-    getAssistenzaDetails(period),
-    getSviluppoDetails(period),
-    getFormazioneDetails(period),
-  ]);
-
-  // Costruisco insight automatici per i "punti di attenzione"
-  const attentionPoints = [];
-
-  // Backlog Sviluppo "abbandonato"
-  if (sviluppoDetails?.backlog?.by_age) {
-    const oldBuckets = sviluppoDetails.backlog.by_age.filter(
-      (b) => ["90-180", "180-365", "over-365"].includes(b.key)
-    );
-    const oldCount = oldBuckets.reduce((sum, b) => sum + b.count, 0);
-    if (oldCount > 0) {
-      attentionPoints.push(
-        `Backlog Sviluppo: ${sviluppoDetails.backlog.total} ticket aperti, ` +
-        `di cui ${oldCount} fermi da oltre 90 giorni`
-      );
-    }
-  }
-
-  // Ticket Assistenza non assegnati
-  if (assistenzaDetails?.backlog?.unassigned > 0) {
-    attentionPoints.push(
-      `${assistenzaDetails.backlog.unassigned} ticket Assistenza non assegnati al momento`
-    );
-  }
-
-  // Ticket Assistenza vecchi
-  if (assistenzaDetails?.backlog?.oldest_days > 30) {
-    attentionPoints.push(
-      `Ticket Assistenza più vecchio aperto da ${assistenzaDetails.backlog.oldest_days} giorni`
-    );
-  }
-
-  // Ticket riaperti Sviluppo
-  if (sviluppoDetails?.reopened_count > 0) {
-    attentionPoints.push(
-      `${sviluppoDetails.reopened_count} ticket Sviluppo riaperti nel periodo (qualità risoluzione)`
-    );
-  }
-
-  return {
-    period: { from, to },
-    generated_at: new Date().toISOString(),
-    assistenza: {
-      ...assistenzaKpis,
-      top_operators: assistenzaDetails?.assignees?.slice(0, 5) ?? [],
-      channels: assistenzaDetails?.channels ?? [],
-      backlog_current: assistenzaDetails?.backlog ?? null,
-    },
-    sviluppo: {
-      ...sviluppoKpis,
-      top_operators: sviluppoDetails?.assignees?.slice(0, 5) ?? [],
-      backlog_current: sviluppoDetails?.backlog ?? null,
-      reopened_count: sviluppoDetails?.reopened_count ?? 0,
-    },
-    chat: {
-      ...chatKpis,
-      top_operators: chatKpis?.operators?.slice(0, 5) ?? [],
-    },
-    formazione: {
-      ...formazioneKpis,
-      top_clients: formazioneDetails?.top_clients?.slice(0, 5) ?? [],
-      topics_count: formazioneDetails?.topics?.length ?? 0,
-    },
-    attention_points: attentionPoints,
+    channels: [], statuses: [], assignees: [], trend: [],
+    total_in_period: 0, reopened_count: 0,
+    backlog: { total: 0, by_status: [], by_age: [], oldest_days: null, unassigned: 0, last_synced_at: null },
   };
 }
 
@@ -1040,21 +768,15 @@ export async function getReportData(period) {
 // ANALISI CHAT - DATI AGGREGATI POST-CATEGORIZZAZIONE LLM
 // ============================================================
 
-/**
- * Restituisce dati aggregati delle chat categorizzate dal LLM.
- * Le chat senza category sono escluse (non ancora processate).
- */
 export async function getChatAnalysisData(period) {
   const { from, to } = asDateRange(period);
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
 
-  // Carica tutte le chat categorizzate del periodo
   const { data, error } = await supabase
     .from("zoho_raw_chats")
     .select("chat_id, category, subcategory, sentiment, resolved, created_time, operator, visitor_name")
-    .gte("created_time", fromIso)
-    .lte("created_time", toIso)
+    .gte("created_time", fromIso).lte("created_time", toIso)
     .not("category", "is", null);
 
   if (error) {
@@ -1064,10 +786,8 @@ export async function getChatAnalysisData(period) {
 
   const rows = data ?? [];
   const total = rows.length;
-
   if (total === 0) return emptyChatAnalysis();
 
-  // Distribuzione categorie
   const byCategory = new Map();
   let urgentTotal = 0, negativeTotal = 0, unresolvedTotal = 0;
 
@@ -1075,13 +795,8 @@ export async function getChatAnalysisData(period) {
     const cat = r.category || "Altro";
     if (!byCategory.has(cat)) {
       byCategory.set(cat, {
-        category: cat,
-        total: 0,
-        urgent: 0,
-        negative: 0,
-        unresolved: 0,
-        positive: 0,
-        resolved: 0,
+        category: cat, total: 0, urgent: 0, negative: 0,
+        unresolved: 0, positive: 0, resolved: 0,
       });
     }
     const o = byCategory.get(cat);
@@ -1093,27 +808,21 @@ export async function getChatAnalysisData(period) {
     if (r.resolved === true) o.resolved++;
   }
 
-  const categories = Array.from(byCategory.values())
-    .map((c) => ({
-      ...c,
-      pct: total > 0 ? (c.total / total) * 100 : 0,
-      pct_urgent: c.total > 0 ? (c.urgent / c.total) * 100 : 0,
-      pct_unresolved: c.total > 0 ? (c.unresolved / c.total) * 100 : 0,
-    }))
-    .sort((a, b) => b.total - a.total);
+  const categories = Array.from(byCategory.values()).map((c) => ({
+    ...c,
+    pct: total > 0 ? (c.total / total) * 100 : 0,
+    pct_urgent: c.total > 0 ? (c.urgent / c.total) * 100 : 0,
+    pct_unresolved: c.total > 0 ? (c.unresolved / c.total) * 100 : 0,
+  })).sort((a, b) => b.total - a.total);
 
-  // Top subcategorie problematiche (chat con sentiment urgente/negativo o non risolte)
   const bySubcategory = new Map();
   for (const r of rows) {
     if (!r.subcategory) continue;
     const key = `${r.category}::${r.subcategory}`;
     if (!bySubcategory.has(key)) {
       bySubcategory.set(key, {
-        category: r.category,
-        subcategory: r.subcategory,
-        total: 0,
-        urgent: 0,
-        unresolved: 0,
+        category: r.category, subcategory: r.subcategory,
+        total: 0, urgent: 0, unresolved: 0,
       });
     }
     const o = bySubcategory.get(key);
@@ -1122,11 +831,10 @@ export async function getChatAnalysisData(period) {
     if (r.resolved === false) o.unresolved++;
   }
   const topSubcategories = Array.from(bySubcategory.values())
-    .filter((s) => s.total >= 5) // Almeno 5 occorrenze
+    .filter((s) => s.total >= 5)
     .sort((a, b) => (b.urgent + b.unresolved) - (a.urgent + a.unresolved))
     .slice(0, 20);
 
-  // Trend mensile per categoria
   const byMonth = new Map();
   for (const r of rows) {
     if (!r.created_time) continue;
@@ -1141,29 +849,18 @@ export async function getChatAnalysisData(period) {
 
   return {
     total,
-    urgent_total: urgentTotal,
-    negative_total: negativeTotal,
-    unresolved_total: unresolvedTotal,
+    urgent_total: urgentTotal, negative_total: negativeTotal, unresolved_total: unresolvedTotal,
     pct_urgent: total > 0 ? (urgentTotal / total) * 100 : 0,
     pct_unresolved: total > 0 ? (unresolvedTotal / total) * 100 : 0,
     pct_negative: total > 0 ? (negativeTotal / total) * 100 : 0,
-    categories,
-    top_subcategories: topSubcategories,
-    trend,
+    categories, top_subcategories: topSubcategories, trend,
   };
 }
 
 function emptyChatAnalysis() {
   return {
-    total: 0,
-    urgent_total: 0,
-    negative_total: 0,
-    unresolved_total: 0,
-    pct_urgent: 0,
-    pct_unresolved: 0,
-    pct_negative: 0,
-    categories: [],
-    top_subcategories: [],
-    trend: [],
+    total: 0, urgent_total: 0, negative_total: 0, unresolved_total: 0,
+    pct_urgent: 0, pct_unresolved: 0, pct_negative: 0,
+    categories: [], top_subcategories: [], trend: [],
   };
 }
