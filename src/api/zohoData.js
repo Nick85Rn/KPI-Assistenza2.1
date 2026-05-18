@@ -864,3 +864,21 @@ function emptyChatAnalysis() {
     categories: [], top_subcategories: [], trend: [],
   };
 }
+// ============================================================
+// REPORT - DATI AGGREGATI PER GENERAZIONE PDF/EMAIL
+// ============================================================
+
+/**
+ * Restituisce un oggetto unificato con tutti i KPI per il report.
+ * Internamente chiama le funzioni esistenti.
+ */
+export async function getReportData(period) {
+  const [assistenza, sviluppo, chat, formazione] = await Promise.all([
+    getTicketKpis("assistenza", period),
+    getTicketKpis("sviluppo", period),
+    getChatKpis(period),
+    getFormazioneKpis(period),
+  ]);
+
+  return { assistenza, sviluppo, chat, formazione };
+}
