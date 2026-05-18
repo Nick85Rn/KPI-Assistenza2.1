@@ -376,11 +376,40 @@ export async function getTopVisitors(period, limit = 10) {
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
 
-  const { data, error } = await supabase
-    .from("zoho_raw_chats")
-    .select("visitor_name, created_time, operator, duration_seconds")
-    .gte("created_time", fromIso).lte("created_time", toIso)
-    .not("visitor_name", "is", null);
+// Paginazione: Supabase limita default a 1000 righe. Scarichiamo in batch.
+  const PAGE_SIZE = 1000;
+  let allRows = [];
+  let pageFrom = 0;
+  let pageTo = PAGE_SIZE - 1;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data: pageData, error: pageError } = await supabase
+      .from("zoho_raw_chats")
+      .select("chat_id, category, subcategory, sentiment, resolved, created_time, operator, visitor_name")
+      .gte("created_time", fromIso).lte("created_time", toIso)
+      .not("category", "is", null)
+      .range(pageFrom, pageTo);
+
+    if (pageError) {
+      console.error("getChatAnalysisData page:", pageError.message);
+      break;
+    }
+    if (!pageData || pageData.length === 0) {
+      hasMore = false;
+      break;
+    }
+    allRows = allRows.concat(pageData);
+    if (pageData.length < PAGE_SIZE) {
+      hasMore = false;
+    } else {
+      pageFrom += PAGE_SIZE;
+      pageTo += PAGE_SIZE;
+    }
+  }
+
+  const data = allRows;
+  const error = null;
 
   if (error) {
     console.error("getTopVisitors:", error.message);
