@@ -1,5 +1,6 @@
 // src/api/zohoData.js
 // Layer di accesso ai dati Zoho via Supabase - Dashboard 2.0
+// Con paginazione automatica per superare il limite di 1000 record di Supabase
 
 import { supabase } from "../supabaseClient";
 
@@ -23,6 +24,37 @@ function asNum(v) {
   if (v == null) return 0;
   const n = Number(v);
   return isNaN(n) ? 0 : n;
+}
+
+/**
+ * Esegue una query Supabase scaricando TUTTI i record con paginazione (range).
+ * Supabase limita default a 1000 righe per query. Questa funzione fa più chiamate.
+ */
+async function fetchAllPaginated(queryBuilder, pageSize = 1000) {
+  let allRows = [];
+  let pageFrom = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const pageTo = pageFrom + pageSize - 1;
+    const { data, error } = await queryBuilder(pageFrom, pageTo);
+
+    if (error) return { data: null, error };
+    if (!data || data.length === 0) {
+      hasMore = false;
+      break;
+    }
+
+    allRows = allRows.concat(data);
+
+    if (data.length < pageSize) {
+      hasMore = false;
+    } else {
+      pageFrom += pageSize;
+    }
+  }
+
+  return { data: allRows, error: null };
 }
 
 const INTERNAL_COMPANIES = new Set([
@@ -76,11 +108,10 @@ function ageBucketFor(daysOld) {
   return "over-365";
 }
 
-// Filtro "saluti" per assistenza
 function isAssistenzaNoise(r) {
   const subject = (r.subject || "").trim();
-  return subject.length < 30 
-    && !r.assignee 
+  return subject.length < 30
+    && !r.assignee
     && (!r.thread_count || r.thread_count <= 1);
 }
 
@@ -125,14 +156,16 @@ export async function getTicketKpis(which, period) {
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
 
-  // SLA: per Assistenza filtro saluti, per Sviluppo no
-  let slaQuery = supabase
-    .from(rawTable)
-    .select("first_response_sec, avg_response_sec, resolution_sec, subject, assignee, thread_count")
-    .gte("created_time", fromIso).lte("created_time", toIso)
-    .not("first_response_sec", "is", null);
+  // SLA con paginazione
+  const { data: slaRows } = await fetchAllPaginated((pageFrom, pageTo) =>
+    supabase
+      .from(rawTable)
+      .select("first_response_sec, avg_response_sec, resolution_sec, subject, assignee, thread_count")
+      .gte("created_time", fromIso).lte("created_time", toIso)
+      .not("first_response_sec", "is", null)
+      .range(pageFrom, pageTo)
+  );
 
-  const { data: slaRows } = await slaQuery;
   const filtered = (slaRows ?? []).filter((r) => {
     if (which === "assistenza") return !isAssistenzaNoise(r);
     return true;
@@ -174,7 +207,7 @@ function emptyTicketKpis() {
 }
 
 // ============================================================
-// CHAT KPIs
+// CHAT KPIs - con paginazione
 // ============================================================
 
 export async function getChatKpis(period) {
@@ -182,10 +215,13 @@ export async function getChatKpis(period) {
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
 
-  const { data, error } = await supabase
-    .from("vw_chats_valid")
-    .select("operator, department, waiting_time_seconds, duration_seconds, created_time")
-    .gte("created_time", fromIso).lte("created_time", toIso);
+  const { data, error } = await fetchAllPaginated((pageFrom, pageTo) =>
+    supabase
+      .from("vw_chats_valid")
+      .select("operator, department, waiting_time_seconds, duration_seconds, created_time")
+      .gte("created_time", fromIso).lte("created_time", toIso)
+      .range(pageFrom, pageTo)
+  );
 
   if (error) {
     console.error("getChatKpis:", error.message);
@@ -256,7 +292,7 @@ function emptyChatKpis() {
 }
 
 // ============================================================
-// FORMAZIONE KPIs
+// FORMAZIONE KPIs - con paginazione
 // ============================================================
 
 export async function getFormazioneKpis(period) {
@@ -264,10 +300,13 @@ export async function getFormazioneKpis(period) {
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
 
-  const { data, error } = await supabase
-    .from("zoho_raw_formazione")
-    .select("operator, duration_minutes, created_time")
-    .gte("created_time", fromIso).lte("created_time", toIso);
+  const { data, error } = await fetchAllPaginated((pageFrom, pageTo) =>
+    supabase
+      .from("zoho_raw_formazione")
+      .select("operator, duration_minutes, created_time")
+      .gte("created_time", fromIso).lte("created_time", toIso)
+      .range(pageFrom, pageTo)
+  );
 
   if (error) {
     console.error("getFormazioneKpis:", error.message);
@@ -331,10 +370,13 @@ export async function getLastSyncByPart() {
 
 export async function getChatHeatmap(period) {
   const { from, to } = asDateRange(period);
-  const { data, error } = await supabase
-    .from("zoho_chat_heatmap")
-    .select("day_of_week, hour_of_day, chats_count, attended_count")
-    .gte("date", from).lte("date", to);
+  const { data, error } = await fetchAllPaginated((pageFrom, pageTo) =>
+    supabase
+      .from("zoho_chat_heatmap")
+      .select("day_of_week, hour_of_day, chats_count, attended_count")
+      .gte("date", from).lte("date", to)
+      .range(pageFrom, pageTo)
+  );
 
   if (error) {
     console.error("getChatHeatmap:", error.message);
@@ -368,7 +410,7 @@ function emptyHeatmap() {
 }
 
 // ============================================================
-// TOP VISITATORI CHAT
+// TOP VISITATORI CHAT - con paginazione
 // ============================================================
 
 export async function getTopVisitors(period, limit = 10) {
@@ -376,40 +418,14 @@ export async function getTopVisitors(period, limit = 10) {
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
 
-// Paginazione: Supabase limita default a 1000 righe. Scarichiamo in batch.
-  const PAGE_SIZE = 1000;
-  let allRows = [];
-  let pageFrom = 0;
-  let pageTo = PAGE_SIZE - 1;
-  let hasMore = true;
-
-  while (hasMore) {
-    const { data: pageData, error: pageError } = await supabase
+  const { data, error } = await fetchAllPaginated((pageFrom, pageTo) =>
+    supabase
       .from("zoho_raw_chats")
-      .select("chat_id, category, subcategory, sentiment, resolved, created_time, operator, visitor_name")
+      .select("visitor_name, created_time, operator, duration_seconds")
       .gte("created_time", fromIso).lte("created_time", toIso)
-      .not("category", "is", null)
-      .range(pageFrom, pageTo);
-
-    if (pageError) {
-      console.error("getChatAnalysisData page:", pageError.message);
-      break;
-    }
-    if (!pageData || pageData.length === 0) {
-      hasMore = false;
-      break;
-    }
-    allRows = allRows.concat(pageData);
-    if (pageData.length < PAGE_SIZE) {
-      hasMore = false;
-    } else {
-      pageFrom += PAGE_SIZE;
-      pageTo += PAGE_SIZE;
-    }
-  }
-
-  const data = allRows;
-  const error = null;
+      .not("visitor_name", "is", null)
+      .range(pageFrom, pageTo)
+  );
 
   if (error) {
     console.error("getTopVisitors:", error.message);
@@ -437,7 +453,7 @@ export async function getTopVisitors(period, limit = 10) {
 }
 
 // ============================================================
-// FORMAZIONE - DETTAGLI
+// FORMAZIONE - DETTAGLI - con paginazione
 // ============================================================
 
 export async function getFormazioneDetails(period) {
@@ -445,17 +461,19 @@ export async function getFormazioneDetails(period) {
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
 
-  const { data, error } = await supabase
-    .from("zoho_raw_formazione")
-    .select("company, topic, duration_minutes, created_time")
-    .gte("created_time", fromIso).lte("created_time", toIso);
+  const { data, error } = await fetchAllPaginated((pageFrom, pageTo) =>
+    supabase
+      .from("zoho_raw_formazione")
+      .select("company, topic, duration_minutes, created_time")
+      .gte("created_time", fromIso).lte("created_time", toIso)
+      .range(pageFrom, pageTo)
+  );
 
   if (error) {
     console.error("getFormazioneDetails:", error.message);
     return emptyFormazioneDetails();
   }
 
-  // Filtro: escludi sessioni <5min
   const rows = (data ?? []).filter((r) => asNum(r.duration_minutes) >= 5);
   const NO_TOPIC_LABEL = "Tipologia non presente";
 
@@ -513,7 +531,7 @@ function emptyFormazioneDetails() {
 }
 
 // ============================================================
-// ASSISTENZA - DETTAGLI ESTESI
+// ASSISTENZA - DETTAGLI ESTESI - con paginazione
 // ============================================================
 
 export async function getAssistenzaDetails(period) {
@@ -521,10 +539,13 @@ export async function getAssistenzaDetails(period) {
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
 
-  const { data: createdRowsAll, error: e1 } = await supabase
-    .from("zoho_raw_assistenza")
-    .select("ticket_id, subject, thread_count, status, channel, assignee, created_time, closed_time, first_response_sec, resolution_sec")
-    .gte("created_time", fromIso).lte("created_time", toIso);
+  const { data: createdRowsAll, error: e1 } = await fetchAllPaginated((pageFrom, pageTo) =>
+    supabase
+      .from("zoho_raw_assistenza")
+      .select("ticket_id, subject, thread_count, status, channel, assignee, created_time, closed_time, first_response_sec, resolution_sec")
+      .gte("created_time", fromIso).lte("created_time", toIso)
+      .range(pageFrom, pageTo)
+  );
 
   if (e1) {
     console.error("getAssistenzaDetails created:", e1.message);
@@ -534,10 +555,13 @@ export async function getAssistenzaDetails(period) {
   const rows = allCreatedRows.filter((r) => !isAssistenzaNoise(r));
   const noiseInPeriod = allCreatedRows.length - rows.length;
 
-  const { data: openRows, error: e2 } = await supabase
-    .from("zoho_raw_assistenza")
-    .select("status, created_time, assignee, subject, thread_count")
-    .in("status", ASSISTENZA_OPEN_STATUSES);
+  const { data: openRows, error: e2 } = await fetchAllPaginated((pageFrom, pageTo) =>
+    supabase
+      .from("zoho_raw_assistenza")
+      .select("status, created_time, assignee, subject, thread_count")
+      .in("status", ASSISTENZA_OPEN_STATUSES)
+      .range(pageFrom, pageTo)
+  );
 
   let backlogTotal = 0, backlogRealCount = 0, backlogNoiseCount = 0;
   let backlogByStatus = [], oldestDays = null, openUnassignedCount = 0;
@@ -657,7 +681,7 @@ function emptyAssistenzaDetails() {
 }
 
 // ============================================================
-// SVILUPPO - DETTAGLI ESTESI
+// SVILUPPO - DETTAGLI ESTESI - con paginazione
 // ============================================================
 
 export async function getSviluppoDetails(period) {
@@ -665,10 +689,13 @@ export async function getSviluppoDetails(period) {
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
 
-  const { data: createdRows, error: e1 } = await supabase
-    .from("zoho_raw_sviluppo")
-    .select("ticket_id, status, channel, assignee, created_time, closed_time, first_response_sec, resolution_sec")
-    .gte("created_time", fromIso).lte("created_time", toIso);
+  const { data: createdRows, error: e1 } = await fetchAllPaginated((pageFrom, pageTo) =>
+    supabase
+      .from("zoho_raw_sviluppo")
+      .select("ticket_id, status, channel, assignee, created_time, closed_time, first_response_sec, resolution_sec")
+      .gte("created_time", fromIso).lte("created_time", toIso)
+      .range(pageFrom, pageTo)
+  );
 
   if (e1) {
     console.error("getSviluppoDetails created:", e1.message);
@@ -676,10 +703,13 @@ export async function getSviluppoDetails(period) {
   }
   const rows = createdRows ?? [];
 
-  const { data: openRows, error: e2 } = await supabase
-    .from("zoho_raw_sviluppo")
-    .select("status, created_time, assignee")
-    .in("status", SVILUPPO_OPEN_STATUSES);
+  const { data: openRows, error: e2 } = await fetchAllPaginated((pageFrom, pageTo) =>
+    supabase
+      .from("zoho_raw_sviluppo")
+      .select("status, created_time, assignee")
+      .in("status", SVILUPPO_OPEN_STATUSES)
+      .range(pageFrom, pageTo)
+  );
 
   let backlogTotal = 0, backlogByStatus = [], backlogByAge = [];
   let oldestDays = null, openUnassignedCount = 0;
@@ -794,7 +824,7 @@ function emptySviluppoDetails() {
 }
 
 // ============================================================
-// ANALISI CHAT - DATI AGGREGATI POST-CATEGORIZZAZIONE LLM
+// ANALISI CHAT - con paginazione
 // ============================================================
 
 export async function getChatAnalysisData(period) {
@@ -802,11 +832,14 @@ export async function getChatAnalysisData(period) {
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
 
-  const { data, error } = await supabase
-    .from("zoho_raw_chats")
-    .select("chat_id, category, subcategory, sentiment, resolved, created_time, operator, visitor_name")
-    .gte("created_time", fromIso).lte("created_time", toIso)
-    .not("category", "is", null);
+  const { data, error } = await fetchAllPaginated((pageFrom, pageTo) =>
+    supabase
+      .from("zoho_raw_chats")
+      .select("chat_id, category, subcategory, sentiment, resolved, created_time, operator, visitor_name")
+      .gte("created_time", fromIso).lte("created_time", toIso)
+      .not("category", "is", null)
+      .range(pageFrom, pageTo)
+  );
 
   if (error) {
     console.error("getChatAnalysisData:", error.message);
@@ -893,14 +926,11 @@ function emptyChatAnalysis() {
     categories: [], top_subcategories: [], trend: [],
   };
 }
+
 // ============================================================
-// REPORT - DATI AGGREGATI PER GENERAZIONE PDF/EMAIL
+// REPORT - DATI AGGREGATI PER PDF/EMAIL
 // ============================================================
 
-/**
- * Restituisce un oggetto unificato con tutti i KPI per il report.
- * Internamente chiama le funzioni esistenti.
- */
 export async function getReportData(period) {
   const [assistenza, sviluppo, chat, formazione] = await Promise.all([
     getTicketKpis("assistenza", period),
