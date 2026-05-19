@@ -94,16 +94,8 @@ function ChatRow({ chat }) {
       <td className="px-4 py-3 text-center">
         <ResolvedBadge resolved={chat.resolved} />
       </td>
-      <td className="px-4 py-3 text-right">
-        
-          href={zohoUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 hover:underline text-xs font-medium"
-        >
-          Apri
-          <ExternalLink size={12} />
-        </a>
+<td className="px-4 py-3 text-right">
+        <a href={zohoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 hover:underline text-xs font-medium">Apri <ExternalLink size={12} /></a>
       </td>
     </tr>
   );
