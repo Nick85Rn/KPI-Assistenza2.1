@@ -941,3 +941,53 @@ export async function getReportData(period) {
 
   return { assistenza, sviluppo, chat, formazione };
 }
+
+// ============================================================
+// DRILL-DOWN: Chat singole per categoria/sottocategoria
+// ============================================================
+
+/**
+ * Ritorna le chat di una specifica categoria/sottocategoria nel periodo.
+ * Supporta filtri opzionali su sentiment e resolved.
+ * Con paginazione, max 1000 chat per chiamata (Supabase limit).
+ */
+export async function getChatsByCategory({
+  category,
+  subcategory = null,
+  period,
+  sentimentFilter = null,  // "urgente" | "negativo" | "neutro" | "positivo" | null
+  resolvedFilter = null,    // true | false | null
+  limit = 100,
+  offset = 0,
+} = {}) {
+  const { from, to } = asDateRange(period);
+  const fromIso = `${from}T00:00:00`;
+  const toIso = `${to}T23:59:59`;
+
+  let query = supabase
+    .from("zoho_raw_chats")
+    .select(
+      "chat_id, visitor_name, operator, created_time, duration_seconds, category, subcategory, sentiment, resolved, message_count",
+      { count: "exact" },
+    )
+    .eq("category", category)
+    .gte("created_time", fromIso)
+    .lte("created_time", toIso)
+    .order("created_time", { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (subcategory) query = query.eq("subcategory", subcategory);
+  if (sentimentFilter) query = query.eq("sentiment", sentimentFilter);
+  if (resolvedFilter !== null) query = query.eq("resolved", resolvedFilter);
+
+  const { data, error, count } = await query;
+  if (error) {
+    console.error("getChatsByCategory:", error.message);
+    return { rows: [], totalCount: 0 };
+  }
+
+  return {
+    rows: data ?? [],
+    totalCount: count ?? 0,
+  };
+}
