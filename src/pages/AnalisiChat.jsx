@@ -1,10 +1,12 @@
+import { useState } from "react";
 import {
   MessageSquare, AlertTriangle, XCircle, ThumbsDown,
-  Sparkles, AlertCircle, Bot,
+  Sparkles, AlertCircle, Bot, MousePointerClick,
 } from "lucide-react";
 import KPICard from "../components/KPICard";
 import Loading from "../components/Loading";
 import SectionTitle from "../components/SectionTitle";
+import ChatDrillDownModal from "../components/ChatDrillDownModal";
 import { formatNumber } from "../lib/format";
 
 export default function AnalisiChat({ data }) {
@@ -12,6 +14,22 @@ export default function AnalisiChat({ data }) {
   const loading = safeData.loading;
   const error = safeData.error;
   const analysis = safeData.chatAnalysis || null;
+  const period = { start: data?.start, end: data?.end };
+
+  // State per drill-down modal
+  const [drillDown, setDrillDown] = useState({
+    isOpen: false,
+    category: null,
+    subcategory: null,
+  });
+
+  function openDrillDown(category, subcategory = null) {
+    setDrillDown({ isOpen: true, category, subcategory });
+  }
+
+  function closeDrillDown() {
+    setDrillDown({ isOpen: false, category: null, subcategory: null });
+  }
 
   if (loading && !analysis) return <Loading size="lg" label="Caricamento analisi chat..." />;
   if (error) {
@@ -37,6 +55,7 @@ export default function AnalisiChat({ data }) {
   return (
     <div className="space-y-8">
       <AIBanner total={analysis.total} />
+
       <section>
         <SectionTitle title="Indicatori globali" hint="Vista d'insieme di tutte le chat categorizzate" />
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -52,16 +71,41 @@ export default function AnalisiChat({ data }) {
       </section>
 
       <section>
-        <SectionTitle title="Distribuzione categorie"
-          hint="Quante chat per ogni categoria, e quanto sono problematiche" />
-        <CategoryBreakdown categories={analysis.categories} total={analysis.total} />
+        <div className="flex items-baseline justify-between mb-2">
+          <div>
+            <SectionTitle
+              title="Distribuzione categorie"
+              hint="Quante chat per ogni categoria, e quanto sono problematiche"
+            />
+          </div>
+          <div className="text-xs text-indigo-600 flex items-center gap-1">
+            <MousePointerClick size={12} />
+            Click su una riga per vedere le chat
+          </div>
+        </div>
+        <CategoryBreakdown
+          categories={analysis.categories}
+          total={analysis.total}
+          onCategoryClick={(cat) => openDrillDown(cat)}
+        />
       </section>
 
       {analysis.top_subcategories.length > 0 && (
         <section>
-          <SectionTitle title="Top sottocategorie problematiche"
-            hint="Le 20 sottocategorie con più ticket urgenti o non risolti" />
-          <SubcategoryTable items={analysis.top_subcategories} />
+          <div className="flex items-baseline justify-between mb-2">
+            <SectionTitle
+              title="Top sottocategorie problematiche"
+              hint="Le 20 sottocategorie con più ticket urgenti o non risolti"
+            />
+            <div className="text-xs text-indigo-600 flex items-center gap-1">
+              <MousePointerClick size={12} />
+              Click per drill-down
+            </div>
+          </div>
+          <SubcategoryTable
+            items={analysis.top_subcategories}
+            onItemClick={(cat, sub) => openDrillDown(cat, sub)}
+          />
         </section>
       )}
 
@@ -72,6 +116,15 @@ export default function AnalisiChat({ data }) {
           <TrendByCategory trend={analysis.trend} />
         </section>
       )}
+
+      {/* Drill-down modal */}
+      <ChatDrillDownModal
+        isOpen={drillDown.isOpen}
+        onClose={closeDrillDown}
+        category={drillDown.category}
+        subcategory={drillDown.subcategory}
+        period={period}
+      />
     </div>
   );
 }
@@ -99,9 +152,11 @@ function AIBanner({ total }) {
   );
 }
 
-function CategoryBreakdown({ categories, total }) {
+function CategoryBreakdown({ categories, total, onCategoryClick }) {
   const maxCount = Math.max(...categories.map((c) => c.total), 1);
-  const sentimentColor = (pct) => pct > 25 ? "text-red-700 font-semibold" : pct > 10 ? "text-amber-700" : "text-slate-600";
+  const sentimentColor = (pct) =>
+    pct > 25 ? "text-red-700 font-semibold" : pct > 10 ? "text-amber-700" : "text-slate-600";
+
   return (
     <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
       <table className="w-full text-sm">
@@ -119,7 +174,12 @@ function CategoryBreakdown({ categories, total }) {
           {categories.map((c) => {
             const barPct = (c.total / maxCount) * 100;
             return (
-              <tr key={c.category} className="hover:bg-slate-50">
+              <tr
+                key={c.category}
+                className="hover:bg-indigo-50 cursor-pointer transition-colors"
+                onClick={() => onCategoryClick?.(c.category)}
+                title={`Click per vedere le ${c.total} chat di ${c.category}`}
+              >
                 <td className="px-4 py-3 font-medium text-slate-900">{c.category}</td>
                 <td className="px-4 py-3">
                   <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
@@ -143,7 +203,7 @@ function CategoryBreakdown({ categories, total }) {
   );
 }
 
-function SubcategoryTable({ items }) {
+function SubcategoryTable({ items, onItemClick }) {
   return (
     <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
       <table className="w-full text-sm">
@@ -158,7 +218,12 @@ function SubcategoryTable({ items }) {
         </thead>
         <tbody className="divide-y divide-slate-100">
           {items.map((s, i) => (
-            <tr key={i} className="hover:bg-slate-50">
+            <tr
+              key={i}
+              className="hover:bg-indigo-50 cursor-pointer transition-colors"
+              onClick={() => onItemClick?.(s.category, s.subcategory)}
+              title={`Click per vedere le ${s.total} chat`}
+            >
               <td className="px-4 py-3 text-slate-900">{s.subcategory}</td>
               <td className="px-4 py-3">
                 <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded bg-slate-100 text-slate-700">
@@ -181,7 +246,6 @@ function SubcategoryTable({ items }) {
 }
 
 function TrendByCategory({ trend }) {
-  // Pivot: months as columns, categories as rows
   const months = [...new Set(trend.map((t) => t.month))].sort();
   const categories = [...new Set(trend.map((t) => t.category))];
 
