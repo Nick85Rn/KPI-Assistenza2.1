@@ -207,19 +207,20 @@ function emptyTicketKpis() {
 }
 
 // ============================================================
-// CHAT KPIs - con paginazione
+// CHAT KPIs - da zoho_daily_chats (aggregato pre-calcolato)
+// Refactor 2026-05-21: leggevamo vw_chats_valid (~1500 righe/mese) e andavamo
+// in timeout (statement_timeout) in vista mese. Ora leggiamo l'aggregato
+// daily (~30-100 righe) come fanno Assistenza e Sviluppo.
 // ============================================================
 
 export async function getChatKpis(period) {
   const { from, to } = asDateRange(period);
-  const fromIso = `${from}T00:00:00`;
-  const toIso = `${to}T23:59:59`;
 
   const { data, error } = await fetchAllPaginated((pageFrom, pageTo) =>
     supabase
-      .from("vw_chats_valid")
-      .select("operator, department, waiting_time_seconds, duration_seconds, created_time")
-      .gte("created_time", fromIso).lte("created_time", toIso)
+      .from("zoho_daily_chats")
+      .select("date, department, operator, chats_count, chats_attended, chats_missed, avg_waiting_sec, avg_duration_sec, total_duration_sec")
+      .gte("date", from).lte("date", to)
       .range(pageFrom, pageTo)
   );
 
@@ -229,57 +230,88 @@ export async function getChatKpis(period) {
   }
 
   const rows = data ?? [];
-  const chats_total = rows.length;
-  let chats_attended = 0, chats_missed = 0;
-  let sumWait = 0, countWait = 0;
-  let sumDur = 0, countDur = 0;
+  if (rows.length === 0) return emptyChatKpis();
+
+  // Placeholder usato dalla funzione recompute_daily_chats per operator IS NULL
+  const MISSED_PLACEHOLDER = "(non assegnato)";
+
+  // Totali aggregati
+  let chats_total = 0, chats_attended = 0, chats_missed = 0;
+
+  // Media pesata: numeratore = avg * sample, denominatore = sample
+  // Usiamo chats_attended come campione (coerente col fatto che solo le chat con
+  // operatore hanno waiting/duration significative)
+  let sumWaitWeighted = 0, countWait = 0;
+  let sumDurWeighted = 0, countDur = 0;
+
+  // Operatori: aggreghiamo lungo le date (stesso operatore appare in più righe)
   const byOp = new Map();
 
   for (const r of rows) {
-    const hasOp = !!r.operator;
-    if (hasOp) chats_attended++;
-    else chats_missed++;
+    const count = asNum(r.chats_count);
+    const attended = asNum(r.chats_attended);
+    const missed = asNum(r.chats_missed);
 
-    if (r.waiting_time_seconds != null && r.waiting_time_seconds > 0) {
-      sumWait += asNum(r.waiting_time_seconds);
-      countWait++;
+    chats_total += count;
+    chats_attended += attended;
+    chats_missed += missed;
+
+    if (r.avg_waiting_sec != null && attended > 0) {
+      sumWaitWeighted += asNum(r.avg_waiting_sec) * attended;
+      countWait += attended;
     }
-    if (r.duration_seconds != null && r.duration_seconds > 0) {
-      sumDur += asNum(r.duration_seconds);
-      countDur++;
+    if (r.avg_duration_sec != null && attended > 0) {
+      sumDurWeighted += asNum(r.avg_duration_sec) * attended;
+      countDur += attended;
     }
 
-    if (hasOp) {
+    // Operatori: salta il placeholder dei missed
+    if (r.operator && r.operator !== MISSED_PLACEHOLDER) {
       const opKey = r.operator;
       if (!byOp.has(opKey)) {
         byOp.set(opKey, {
-          operator: opKey, chats: 0, attended: 0, missed: 0,
-          _sumWait: 0, _countWait: 0, _sumDur: 0, _countDur: 0,
+          operator: opKey,
+          chats: 0,
+          attended: 0,
+          missed: 0,
+          _sumWaitWeighted: 0,
+          _countWait: 0,
+          _sumDurWeighted: 0,
+          _countDur: 0,
         });
       }
       const o = byOp.get(opKey);
-      o.chats++; o.attended++;
-      if (r.waiting_time_seconds != null && r.waiting_time_seconds > 0) {
-        o._sumWait += asNum(r.waiting_time_seconds); o._countWait++;
+      o.chats += count;
+      o.attended += attended;
+      o.missed += missed;
+      if (r.avg_waiting_sec != null && attended > 0) {
+        o._sumWaitWeighted += asNum(r.avg_waiting_sec) * attended;
+        o._countWait += attended;
       }
-      if (r.duration_seconds != null && r.duration_seconds > 0) {
-        o._sumDur += asNum(r.duration_seconds); o._countDur++;
+      if (r.avg_duration_sec != null && attended > 0) {
+        o._sumDurWeighted += asNum(r.avg_duration_sec) * attended;
+        o._countDur += attended;
       }
     }
   }
 
   const operators = Array.from(byOp.values())
     .map((o) => ({
-      operator: o.operator, chats: o.chats, attended: o.attended, missed: o.missed,
-      avg_wait_sec: o._countWait > 0 ? Math.round(o._sumWait / o._countWait) : null,
-      avg_duration_sec: o._countDur > 0 ? Math.round(o._sumDur / o._countDur) : null,
+      operator: o.operator,
+      chats: o.chats,
+      attended: o.attended,
+      missed: o.missed,
+      avg_wait_sec: o._countWait > 0 ? Math.round(o._sumWaitWeighted / o._countWait) : null,
+      avg_duration_sec: o._countDur > 0 ? Math.round(o._sumDurWeighted / o._countDur) : null,
     }))
     .sort((a, b) => b.chats - a.chats);
 
   return {
-    chats_total, chats_attended, chats_missed,
-    avg_waiting_sec: countWait > 0 ? Math.round(sumWait / countWait) : null,
-    avg_duration_sec: countDur > 0 ? Math.round(sumDur / countDur) : null,
+    chats_total,
+    chats_attended,
+    chats_missed,
+    avg_waiting_sec: countWait > 0 ? Math.round(sumWaitWeighted / countWait) : null,
+    avg_duration_sec: countDur > 0 ? Math.round(sumDurWeighted / countDur) : null,
     operators,
   };
 }
