@@ -108,13 +108,6 @@ function ageBucketFor(daysOld) {
   return "over-365";
 }
 
-function isAssistenzaNoise(r) {
-  const subject = (r.subject || "").trim();
-  return subject.length < 30
-    && !r.assignee
-    && (!r.thread_count || r.thread_count <= 1);
-}
-
 // ============================================================
 // PING
 // ============================================================
@@ -128,6 +121,7 @@ export async function pingSupabase() {
 
 // ============================================================
 // TICKET KPIs
+// (rimosso filtro isAssistenzaNoise - conta tutto come Zoho)
 // ============================================================
 
 export async function getTicketKpis(which, period) {
@@ -156,25 +150,20 @@ export async function getTicketKpis(which, period) {
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
 
-  // SLA con paginazione
+  // SLA con paginazione (senza filtro saluti)
   const { data: slaRows } = await fetchAllPaginated((pageFrom, pageTo) =>
     supabase
       .from(rawTable)
-      .select("first_response_sec, avg_response_sec, resolution_sec, subject, assignee, thread_count")
+      .select("first_response_sec, avg_response_sec, resolution_sec")
       .gte("created_time", fromIso).lte("created_time", toIso)
       .not("first_response_sec", "is", null)
       .range(pageFrom, pageTo)
   );
 
-  const filtered = (slaRows ?? []).filter((r) => {
-    if (which === "assistenza") return !isAssistenzaNoise(r);
-    return true;
-  });
-
   let sumFirst = 0, sumResp = 0, sumRes = 0;
   let countFirst = 0, countResp = 0, countRes = 0;
 
-  for (const r of filtered) {
+  for (const r of slaRows ?? []) {
     if (r.first_response_sec != null) {
       sumFirst += asNum(r.first_response_sec);
       countFirst++;
@@ -208,9 +197,6 @@ function emptyTicketKpis() {
 
 // ============================================================
 // CHAT KPIs - da zoho_daily_chats (aggregato pre-calcolato)
-// Refactor 2026-05-21: leggevamo vw_chats_valid (~1500 righe/mese) e andavamo
-// in timeout (statement_timeout) in vista mese. Ora leggiamo l'aggregato
-// daily (~30-100 righe) come fanno Assistenza e Sviluppo.
 // ============================================================
 
 export async function getChatKpis(period) {
@@ -232,19 +218,11 @@ export async function getChatKpis(period) {
   const rows = data ?? [];
   if (rows.length === 0) return emptyChatKpis();
 
-  // Placeholder usato dalla funzione recompute_daily_chats per operator IS NULL
   const MISSED_PLACEHOLDER = "(non assegnato)";
 
-  // Totali aggregati
   let chats_total = 0, chats_attended = 0, chats_missed = 0;
-
-  // Media pesata: numeratore = avg * sample, denominatore = sample
-  // Usiamo chats_attended come campione (coerente col fatto che solo le chat con
-  // operatore hanno waiting/duration significative)
   let sumWaitWeighted = 0, countWait = 0;
   let sumDurWeighted = 0, countDur = 0;
-
-  // Operatori: aggreghiamo lungo le date (stesso operatore appare in più righe)
   const byOp = new Map();
 
   for (const r of rows) {
@@ -265,7 +243,6 @@ export async function getChatKpis(period) {
       countDur += attended;
     }
 
-    // Operatori: salta il placeholder dei missed
     if (r.operator && r.operator !== MISSED_PLACEHOLDER) {
       const opKey = r.operator;
       if (!byOp.has(opKey)) {
@@ -345,7 +322,6 @@ export async function getFormazioneKpis(period) {
     return emptyFormazioneKpis();
   }
 
-  // Filtro: escludi sessioni <5min
   const rows = (data ?? []).filter((r) => asNum(r.duration_minutes) >= 5);
   const total_records = rows.length;
   let total_minutes = 0;
@@ -564,6 +540,7 @@ function emptyFormazioneDetails() {
 
 // ============================================================
 // ASSISTENZA - DETTAGLI ESTESI - con paginazione
+// (rimosso filtro isAssistenzaNoise - conta tutto come Zoho)
 // ============================================================
 
 export async function getAssistenzaDetails(period) {
@@ -571,7 +548,7 @@ export async function getAssistenzaDetails(period) {
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
 
-  const { data: createdRowsAll, error: e1 } = await fetchAllPaginated((pageFrom, pageTo) =>
+  const { data: rows, error: e1 } = await fetchAllPaginated((pageFrom, pageTo) =>
     supabase
       .from("zoho_raw_assistenza")
       .select("ticket_id, subject, thread_count, status, channel, assignee, created_time, closed_time, first_response_sec, resolution_sec")
@@ -583,9 +560,7 @@ export async function getAssistenzaDetails(period) {
     console.error("getAssistenzaDetails created:", e1.message);
     return emptyAssistenzaDetails();
   }
-  const allCreatedRows = createdRowsAll ?? [];
-  const rows = allCreatedRows.filter((r) => !isAssistenzaNoise(r));
-  const noiseInPeriod = allCreatedRows.length - rows.length;
+  const allRows = rows ?? [];
 
   const { data: openRows, error: e2 } = await fetchAllPaginated((pageFrom, pageTo) =>
     supabase
@@ -595,14 +570,13 @@ export async function getAssistenzaDetails(period) {
       .range(pageFrom, pageTo)
   );
 
-  let backlogTotal = 0, backlogRealCount = 0, backlogNoiseCount = 0;
+  let backlogTotal = 0;
   let backlogByStatus = [], oldestDays = null, openUnassignedCount = 0;
 
   if (!e2 && openRows) {
     backlogTotal = openRows.length;
     const byStatus = new Map();
     let oldestMs = Date.now();
-    const realRows = [];
 
     for (const r of openRows) {
       const s = r.status || "(none)";
@@ -610,14 +584,7 @@ export async function getAssistenzaDetails(period) {
       byStatus.set(s, byStatus.get(s) + 1);
       if (!r.assignee) openUnassignedCount++;
 
-      const noise = isAssistenzaNoise(r);
-      if (noise) {
-        backlogNoiseCount++;
-      } else {
-        backlogRealCount++;
-        realRows.push(r);
-      }
-      if (!noise && r.created_time) {
+      if (r.created_time) {
         const t = new Date(r.created_time).getTime();
         if (!isNaN(t) && t < oldestMs) oldestMs = t;
       }
@@ -627,7 +594,7 @@ export async function getAssistenzaDetails(period) {
       .map(([status, count]) => ({ status, count }))
       .sort((a, b) => b.count - a.count);
 
-    if (realRows.length > 0) {
+    if (openRows.length > 0) {
       oldestDays = Math.floor((Date.now() - oldestMs) / (1000 * 60 * 60 * 24));
     } else {
       oldestDays = null;
@@ -639,7 +606,7 @@ export async function getAssistenzaDetails(period) {
     .select("count, last_synced_at").eq("source", "assistenza").maybeSingle();
 
   const byChannel = new Map();
-  for (const r of rows) {
+  for (const r of allRows) {
     const c = r.channel || "(non specificato)";
     if (!byChannel.has(c)) byChannel.set(c, { channel: c, count: 0 });
     byChannel.get(c).count++;
@@ -647,7 +614,7 @@ export async function getAssistenzaDetails(period) {
   const channels = Array.from(byChannel.values()).sort((a, b) => b.count - a.count);
 
   const byStatus2 = new Map();
-  for (const r of rows) {
+  for (const r of allRows) {
     const s = r.status || "(non specificato)";
     if (!byStatus2.has(s)) byStatus2.set(s, { status: s, count: 0, is_open: false, is_closed: false });
     const o = byStatus2.get(s);
@@ -658,7 +625,7 @@ export async function getAssistenzaDetails(period) {
   const statuses = Array.from(byStatus2.values()).sort((a, b) => b.count - a.count);
 
   const byAssignee = new Map();
-  for (const r of rows) {
+  for (const r of allRows) {
     const a = r.assignee ? normalizeOperatorName(r.assignee) : "(non assegnato)";
     if (!byAssignee.has(a)) {
       byAssignee.set(a, {
@@ -694,9 +661,9 @@ export async function getAssistenzaDetails(period) {
 
   return {
     channels, statuses, assignees, trend,
-    total_in_period: rows.length, noise_in_period: noiseInPeriod,
+    total_in_period: allRows.length,
     backlog: {
-      total: backlogTotal, real_count: backlogRealCount, noise_count: backlogNoiseCount,
+      total: backlogTotal,
       by_status: backlogByStatus, oldest_days: oldestDays,
       unassigned: openUnassignedCount,
       last_synced_at: syncStatus?.last_synced_at ?? null,
@@ -707,8 +674,8 @@ export async function getAssistenzaDetails(period) {
 function emptyAssistenzaDetails() {
   return {
     channels: [], statuses: [], assignees: [], trend: [],
-    total_in_period: 0, noise_in_period: 0,
-    backlog: { total: 0, real_count: 0, noise_count: 0, by_status: [], oldest_days: null, unassigned: 0, last_synced_at: null },
+    total_in_period: 0,
+    backlog: { total: 0, by_status: [], oldest_days: null, unassigned: 0, last_synced_at: null },
   };
 }
 
@@ -978,17 +945,12 @@ export async function getReportData(period) {
 // DRILL-DOWN: Chat singole per categoria/sottocategoria
 // ============================================================
 
-/**
- * Ritorna le chat di una specifica categoria/sottocategoria nel periodo.
- * Supporta filtri opzionali su sentiment e resolved.
- * Con paginazione, max 1000 chat per chiamata (Supabase limit).
- */
 export async function getChatsByCategory({
   category,
   subcategory = null,
   period,
-  sentimentFilter = null,  // "urgente" | "negativo" | "neutro" | "positivo" | null
-  resolvedFilter = null,    // true | false | null
+  sentimentFilter = null,
+  resolvedFilter = null,
   limit = 100,
   offset = 0,
 } = {}) {
