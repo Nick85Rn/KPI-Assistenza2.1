@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   AlertCircle,
   User,
+  Moon,
 } from "lucide-react";
 import KPICard from "../components/KPICard";
 import Loading from "../components/Loading";
@@ -44,6 +45,7 @@ export default function RepartoChat({ data }) {
   const cur = current.chat || {};
   const prev = (previous && previous.chat) || {};
   const ya = (yoy && yoy.chat) || {};
+  const fuoriOrario = safeData.chatFuoriOrario || { chats_total: 0, byDepartment: [] };
 
   const operators = Array.isArray(cur.operators) ? cur.operators : [];
 
@@ -66,7 +68,7 @@ export default function RepartoChat({ data }) {
           title="Reparto Chat"
           hint="Vista d'insieme delle chat gestite via SalesIQ"
         />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <KPICard
             label="Chat totali"
             value={cur.chats_total ?? 0}
@@ -107,6 +109,14 @@ export default function RepartoChat({ data }) {
             icon={CheckCircle2}
             intent="positive"
             suffix="%"
+          />
+          <KPICard
+            label="Chat fuori orario"
+            value={fuoriOrario.chats_total}
+            icon={Moon}
+            intent="neutral"
+            formatter={formatNumber}
+            hint="Arrivate senza operatore disponibile"
           />
         </div>
       </section>
