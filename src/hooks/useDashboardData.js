@@ -23,23 +23,23 @@ export function useDashboardData({
   start, end, prevStart, prevEnd, yoyStart, yoyEnd,
   extras = {},
 }) {
-const [state, setState] = useState({
-  loading: true,
-  error: null,
-  start: null,
-  end: null,
-  current: null,
-  previous: null,
-  yoy: null,
-  lastSync: null,
-  heatmap: null,
-  topVisitors: null,
-  formazioneDetails: null,
-  assistenzaDetails: null,
-  sviluppoDetails: null,
-  chatAnalysis: null,
-  chatFuoriOrario: null,  // ⬅️ NUOVO
-});
+  const [state, setState] = useState({
+    loading: true,
+    error: null,
+    start: null,
+    end: null,
+    current: null,
+    previous: null,
+    yoy: null,
+    lastSync: null,
+    heatmap: null,
+    topVisitors: null,
+    formazioneDetails: null,
+    assistenzaDetails: null,
+    sviluppoDetails: null,
+    chatAnalysis: null,
+    chatFuoriOrario: null,
+  });
 
   const requestIdRef = useRef(0);
   const backlogIntervalRef = useRef(null);
@@ -73,6 +73,7 @@ const [state, setState] = useState({
         assistenzaDetailsData,
         sviluppoDetailsData,
         chatAnalysisData,
+        chatFuoriOrarioData,
       ] = await Promise.all([
         getTicketKpis("assistenza", cur),
         getTicketKpis("sviluppo", cur),
@@ -93,6 +94,7 @@ const [state, setState] = useState({
         extras.assistenzaDetails ? getAssistenzaDetails(cur) : Promise.resolve(null),
         extras.sviluppoDetails ? getSviluppoDetails(cur) : Promise.resolve(null),
         extras.chatAnalysis ? getChatAnalysisData(cur) : Promise.resolve(null),
+        getChatFuoriOrarioKpis(cur),
       ]);
 
       if (reqId !== requestIdRef.current) return;
@@ -112,6 +114,7 @@ const [state, setState] = useState({
         assistenzaDetails: assistenzaDetailsData,
         sviluppoDetails: sviluppoDetailsData,
         chatAnalysis: chatAnalysisData,
+        chatFuoriOrario: chatFuoriOrarioData,
       });
     } catch (err) {
       if (reqId !== requestIdRef.current) return;
