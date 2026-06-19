@@ -23,22 +23,23 @@ export function useDashboardData({
   start, end, prevStart, prevEnd, yoyStart, yoyEnd,
   extras = {},
 }) {
-  const [state, setState] = useState({
-    loading: true,
-    error: null,
-    start: null,
-    end: null,
-    current: null,
-    previous: null,
-    yoy: null,
-    lastSync: null,
-    heatmap: null,
-    topVisitors: null,
-    formazioneDetails: null,
-    assistenzaDetails: null,
-    sviluppoDetails: null,
-    chatAnalysis: null,
-  });
+const [state, setState] = useState({
+  loading: true,
+  error: null,
+  start: null,
+  end: null,
+  current: null,
+  previous: null,
+  yoy: null,
+  lastSync: null,
+  heatmap: null,
+  topVisitors: null,
+  formazioneDetails: null,
+  assistenzaDetails: null,
+  sviluppoDetails: null,
+  chatAnalysis: null,
+  chatFuoriOrario: null,  // ⬅️ NUOVO
+});
 
   const requestIdRef = useRef(0);
   const backlogIntervalRef = useRef(null);
