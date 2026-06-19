@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import {
   getTicketKpis,
   getChatKpis,
+  getChatFuoriOrarioKpis,
   getFormazioneKpis,
   getLastSyncByPart,
   getChatHeatmap,
