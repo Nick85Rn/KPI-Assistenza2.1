@@ -301,6 +301,47 @@ function emptyChatKpis() {
 }
 
 // ============================================================
+// CHAT FUORI ORARIO (senza operatore/durata)
+// ============================================================
+
+export async function getChatFuoriOrarioKpis(period) {
+  const { from, to } = asDateRange(period);
+
+  const { data, error } = await fetchAllPaginated((pageFrom, pageTo) =>
+    supabase
+      .from("zoho_daily_chats_fuori_orario")
+      .select("date, department, chats_count")
+      .gte("date", from).lte("date", to)
+      .range(pageFrom, pageTo)
+  );
+
+  if (error) {
+    console.error("getChatFuoriOrarioKpis:", error.message);
+    return { chats_total: 0, byDepartment: [] };
+  }
+
+  const rows = data ?? [];
+  if (rows.length === 0) return { chats_total: 0, byDepartment: [] };
+
+  let chats_total = 0;
+  const byDept = new Map();
+
+  for (const r of rows) {
+    const count = asNum(r.chats_count);
+    chats_total += count;
+
+    const deptKey = r.department || "(senza dipartimento)";
+    byDept.set(deptKey, (byDept.get(deptKey) || 0) + count);
+  }
+
+  const byDepartment = Array.from(byDept.entries())
+    .map(([department, chats]) => ({ department, chats }))
+    .sort((a, b) => b.chats - a.chats);
+
+  return { chats_total, byDepartment };
+}
+
+// ============================================================
 // FORMAZIONE KPIs - con paginazione
 // ============================================================
 
