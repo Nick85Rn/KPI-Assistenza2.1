@@ -979,7 +979,39 @@ export async function getReportData(period) {
     getFormazioneKpis(period),
   ]);
 
-  return { assistenza, sviluppo, chat, formazione };
+  const { from, to } = asDateRange(period);
+
+  // Punti di attenzione: regole semplici, calcolate sui KPI già disponibili
+  // (nessuna query extra) — segnalano solo anomalie evidenti.
+  const attention_points = [];
+  if (chat.chats_total > 0) {
+    const pctAccettate = chat.chats_attended / chat.chats_total;
+    if (pctAccettate < 0.85) {
+      attention_points.push(
+        `Solo il ${Math.round(pctAccettate * 100)}% delle chat è stato accettato da un operatore (sotto la soglia dell'85%).`
+      );
+    }
+  }
+  if (assistenza.max_backlog > 50) {
+    attention_points.push(
+      `Il backlog ticket Assistenza ha raggiunto un massimo di ${assistenza.max_backlog} ticket aperti nel periodo.`
+    );
+  }
+  if (sviluppo.max_backlog > 30) {
+    attention_points.push(
+      `Il backlog ticket Sviluppo ha raggiunto un massimo di ${sviluppo.max_backlog} ticket aperti nel periodo.`
+    );
+  }
+
+  return {
+    period: { from, to },
+    generated_at: new Date().toISOString(),
+    attention_points,
+    assistenza,
+    sviluppo,
+    chat,
+    formazione,
+  };
 }
 
 // ============================================================
