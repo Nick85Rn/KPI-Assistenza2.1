@@ -13,6 +13,7 @@ import Assistenza from "./pages/Assistenza";
 import Sviluppo from "./pages/Sviluppo";
 import AnalisiChat from "./pages/AnalisiChat";
 import Report from "./pages/Report";
+import Impostazioni from "./pages/Impostazioni";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { useSyncStatus } from "./hooks/useSyncStatus";
 import { periodBounds, previousPeriod, yoyPeriod, formatPeriodLabel } from "./lib/periods";
@@ -94,7 +95,7 @@ function AppInner() {
   const lastSync = data.lastSync && typeof data.lastSync === "object" ? data.lastSync : {};
   const hasSyncInfo = Object.keys(lastSync).length > 0;
 
-  const showOverlay = !!data.loading && !!data.current && activePage !== "report";
+  const showOverlay = !!data.loading && !!data.current && activePage !== "report" && activePage !== "impostazioni";
   const overlayLabel = sync.running
     ? "Sincronizzazione con Zoho in corso..."
     : "Aggiornamento dati...";
@@ -159,6 +160,9 @@ function AppInner() {
 function PageContent({ activePage, data, period, periodType }) {
   if (activePage === "report") {
     return <Report period={period} periodType={periodType} />;
+  }
+  if (activePage === "impostazioni") {
+    return <Impostazioni />;
   }
   if (data.loading && !data.current) {
     return <Loading size="lg" label="Caricamento dati Zoho..." />;
