@@ -1,0 +1,10 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Redirect SPA: tutte le route (es. /landing) devono servire index.html,
+# altrimenti un accesso diretto all'URL (non navigazione interna) darebbe 404.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
