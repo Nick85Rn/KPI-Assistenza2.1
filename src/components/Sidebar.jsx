@@ -9,6 +9,7 @@ import {
   Code2,
   Bot,
   FileText,
+  Settings,
 } from "lucide-react";
 
 export const NAV_ITEMS = [
@@ -19,6 +20,7 @@ export const NAV_ITEMS = [
   { key: "sviluppo",     label: "Sviluppo",      icon: Code2,         live: true  },
   { key: "analisi-chat", label: "Analisi Chat",  icon: Bot,           live: true, badge: "AI" },
   { key: "report",       label: "Report",        icon: FileText,      live: true  },
+  { key: "impostazioni", label: "Impostazioni",  icon: Settings,      live: true  },
 ];
 
 export default function Sidebar({ active, onChange }) {
