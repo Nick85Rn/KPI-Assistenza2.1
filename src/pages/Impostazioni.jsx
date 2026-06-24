@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabaseClient";
-import { Save, CheckCircle2, AlertCircle, Loader2, Eye, MessageCircle, Copy, Code2, Upload, Trash2 } from "lucide-react";
+import { Save, CheckCircle2, AlertCircle, Loader2, Eye, MessageCircle, Copy, Code2, Upload, Trash2, ExternalLink } from "lucide-react";
 
 const FONT_OPTIONS = [
   { value: "system", label: "Predefinito (sistema)", css: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif" },
@@ -23,6 +23,7 @@ function fontCssFor(value) {
 
 const WIDGET_SCRIPT_URL = "https://faqpienissimo.netlify.app/widget.js";
 const WIDGET_SNIPPET = `<script src="${WIDGET_SCRIPT_URL}" async></script>`;
+const WIDGET_TEST_URL = "https://faqpienissimo.netlify.app/widget-test";
 
 const MAX_ICON_SIZE_BYTES = 1024 * 1024; // 1 MB
 const ALLOWED_ICON_TYPES = ["image/png", "image/jpeg", "image/svg+xml", "image/webp"];
@@ -495,6 +496,21 @@ export default function Impostazioni() {
             )}
           </button>
         </div>
+
+        <a
+          href={WIDGET_TEST_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 mt-4 px-3 py-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 hover:underline"
+        >
+          <ExternalLink size={14} />
+          Apri pagina di test del widget
+        </a>
+        <p className="text-xs text-slate-400 mt-1">
+          Carica il widget reale con la configurazione attuale, per
+          verificarne aspetto e funzionamento prima di consegnarlo allo
+          Sviluppo.
+        </p>
       </section>
 
       {errorMsg && (
