@@ -1,20 +1,40 @@
 // src/pages/Impostazioni.jsx
 //
-// Pannello per configurare il messaggio di benvenuto del widget
-// installato sul Backoffice clienti. Il widget legge questi valori
-// da Supabase (tabella widget_settings) in lettura pubblica.
+// Pannello per configurare il widget installato sul Backoffice
+// clienti: testi, aspetto (colore/posizione/dimensioni/font), icona
+// e URL della pagina di assistenza. Il widget (widget.js, servito da
+// pienissimo-faq) legge questi valori da Supabase in lettura pubblica.
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabaseClient";
-import { Save, CheckCircle2, AlertCircle, Loader2, Eye } from "lucide-react";
+import { Save, CheckCircle2, AlertCircle, Loader2, Eye, MessageCircle } from "lucide-react";
+
+const FONT_OPTIONS = [
+  { value: "system", label: "Predefinito (sistema)", css: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif" },
+  { value: "arial", label: "Arial", css: "Arial, Helvetica, sans-serif" },
+  { value: "georgia", label: "Georgia (serif)", css: "Georgia, 'Times New Roman', serif" },
+  { value: "verdana", label: "Verdana", css: "Verdana, Geneva, sans-serif" },
+  { value: "courier", label: "Courier (monospace)", css: "'Courier New', Courier, monospace" },
+];
+
+function fontCssFor(value) {
+  return (FONT_OPTIONS.find((f) => f.value === value) || FONT_OPTIONS[0]).css;
+}
+
+const DEFAULT_FORM = {
+  welcome_title: "",
+  welcome_message: "",
+  button_label: "",
+  is_active: true,
+  position: "bottom-right",
+  primary_color: "#1E6EAA",
+  button_size: 56,
+  font_family: "system",
+  landing_url: "",
+};
 
 export default function Impostazioni() {
-  const [form, setForm] = useState({
-    welcome_title: "",
-    welcome_message: "",
-    button_label: "",
-    is_active: true,
-  });
+  const [form, setForm] = useState(DEFAULT_FORM);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveState, setSaveState] = useState(null); // null | "success" | "error"
@@ -26,7 +46,9 @@ export default function Impostazioni() {
     setErrorMsg(null);
     const { data, error } = await supabase
       .from("widget_settings")
-      .select("welcome_title, welcome_message, button_label, is_active, updated_at")
+      .select(
+        "welcome_title, welcome_message, button_label, is_active, position, primary_color, button_size, font_family, landing_url, icon_url, updated_at"
+      )
       .eq("id", 1)
       .single();
 
@@ -41,6 +63,12 @@ export default function Impostazioni() {
       welcome_message: data.welcome_message ?? "",
       button_label: data.button_label ?? "",
       is_active: data.is_active ?? true,
+      position: data.position ?? "bottom-right",
+      primary_color: data.primary_color ?? "#1E6EAA",
+      button_size: data.button_size ?? 56,
+      font_family: data.font_family ?? "system",
+      landing_url: data.landing_url ?? "",
+      icon_url: data.icon_url ?? null,
     });
     setUpdatedAt(data.updated_at ?? null);
     setLoading(false);
@@ -67,6 +95,11 @@ export default function Impostazioni() {
         welcome_message: form.welcome_message,
         button_label: form.button_label,
         is_active: form.is_active,
+        position: form.position,
+        primary_color: form.primary_color,
+        button_size: form.button_size,
+        font_family: form.font_family,
+        landing_url: form.landing_url,
         updated_at: new Date().toISOString(),
       })
       .eq("id", 1);
@@ -95,10 +128,11 @@ export default function Impostazioni() {
 
   return (
     <div className="max-w-3xl space-y-6">
+      {/* ============ TESTI ============ */}
       <section className="bg-white border border-slate-200 rounded-lg p-6">
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-lg font-bold text-slate-900">
-            Widget Backoffice — Messaggio di benvenuto
+            Widget Backoffice — Testi
           </h2>
           <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
             <input
@@ -162,40 +196,144 @@ export default function Impostazioni() {
             />
           </div>
         </div>
+      </section>
 
-        {errorMsg && (
-          <div className="mt-4 flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-            <AlertCircle size={16} />
-            {errorMsg}
+      {/* ============ ASPETTO ============ */}
+      <section className="bg-white border border-slate-200 rounded-lg p-6">
+        <h2 className="text-lg font-bold text-slate-900 mb-1">Aspetto</h2>
+        <p className="text-sm text-slate-500 mb-6">
+          Colore, posizione, dimensioni e font del widget.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Colore principale
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={form.primary_color}
+                onChange={(e) => handleChange("primary_color", e.target.value)}
+                className="w-10 h-10 rounded-lg border border-slate-300 cursor-pointer p-0.5"
+              />
+              <input
+                type="text"
+                value={form.primary_color}
+                onChange={(e) => handleChange("primary_color", e.target.value)}
+                className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+              />
+            </div>
           </div>
-        )}
 
-        <div className="flex items-center gap-3 mt-6">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-            {saving ? "Salvataggio..." : "Salva modifiche"}
-          </button>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Posizione
+            </label>
+            <select
+              value={form.position}
+              onChange={(e) => handleChange("position", e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+            >
+              <option value="bottom-right">Basso a destra</option>
+              <option value="bottom-left">Basso a sinistra</option>
+            </select>
+          </div>
 
-          {saveState === "success" && (
-            <span className="inline-flex items-center gap-1.5 text-sm text-emerald-700">
-              <CheckCircle2 size={16} />
-              Salvato
-            </span>
-          )}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Dimensione bottone ({form.button_size}px)
+            </label>
+            <input
+              type="range"
+              min={40}
+              max={80}
+              step={2}
+              value={form.button_size}
+              onChange={(e) => handleChange("button_size", Number(e.target.value))}
+              className="w-full accent-indigo-600"
+            />
+            <div className="flex justify-between text-xs text-slate-400">
+              <span>40px</span>
+              <span>80px</span>
+            </div>
+          </div>
 
-          {updatedAt && (
-            <span className="text-xs text-slate-400 ml-auto">
-              Ultimo aggiornamento: {new Date(updatedAt).toLocaleString("it-IT")}
-            </span>
-          )}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Font
+            </label>
+            <select
+              value={form.font_family}
+              onChange={(e) => handleChange("font_family", e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+            >
+              {FONT_OPTIONS.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </section>
 
-      {/* Anteprima live */}
+      {/* ============ COMPORTAMENTO ============ */}
+      <section className="bg-white border border-slate-200 rounded-lg p-6">
+        <h2 className="text-lg font-bold text-slate-900 mb-1">Comportamento</h2>
+        <p className="text-sm text-slate-500 mb-6">
+          Dove porta il bottone "{form.button_label || "Vai all'assistenza"}" del popup.
+        </p>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            URL pagina di assistenza
+          </label>
+          <input
+            type="url"
+            value={form.landing_url}
+            onChange={(e) => handleChange("landing_url", e.target.value)}
+            placeholder="https://faqpienissimo.netlify.app/landing"
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+          />
+          <p className="text-xs text-slate-400 mt-1">
+            Si apre in una nuova tab quando il cliente clicca il bottone nel popup.
+          </p>
+        </div>
+      </section>
+
+      {errorMsg && (
+        <div className="flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          <AlertCircle size={16} />
+          {errorMsg}
+        </div>
+      )}
+
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors"
+        >
+          {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+          {saving ? "Salvataggio..." : "Salva modifiche"}
+        </button>
+
+        {saveState === "success" && (
+          <span className="inline-flex items-center gap-1.5 text-sm text-emerald-700">
+            <CheckCircle2 size={16} />
+            Salvato
+          </span>
+        )}
+
+        {updatedAt && (
+          <span className="text-xs text-slate-400 ml-auto">
+            Ultimo aggiornamento: {new Date(updatedAt).toLocaleString("it-IT")}
+          </span>
+        )}
+      </div>
+
+      {/* ============ ANTEPRIMA LIVE ============ */}
       <section className="bg-white border border-slate-200 rounded-lg p-6">
         <div className="flex items-center gap-2 mb-4">
           <Eye size={16} className="text-slate-400" />
@@ -203,8 +341,19 @@ export default function Impostazioni() {
             Anteprima widget
           </h3>
         </div>
-        <div className="bg-slate-50 rounded-lg p-8 flex justify-end">
-          <div className="w-72 bg-white rounded-2xl shadow-lg border border-slate-200 p-5">
+        <div
+          className="bg-slate-50 rounded-lg p-8 relative"
+          style={{ minHeight: 260, fontFamily: fontCssFor(form.font_family) }}
+        >
+          {/* Popup */}
+          <div
+            className="bg-white rounded-2xl shadow-lg border border-slate-200 p-5 absolute"
+            style={{
+              width: 280,
+              bottom: form.button_size + 36,
+              [form.position === "bottom-left" ? "left" : "right"]: 24,
+            }}
+          >
             <div className="font-bold text-base text-slate-900 mb-2">
               {form.welcome_title || "Ciao! 👋"}
             </div>
@@ -214,10 +363,25 @@ export default function Impostazioni() {
             <button
               type="button"
               disabled
-              className="w-full bg-indigo-600 text-white text-sm font-medium rounded-lg py-2.5 cursor-default"
+              className="w-full text-white text-sm font-medium rounded-lg py-2.5 cursor-default"
+              style={{ background: form.primary_color }}
             >
               {form.button_label || "Vai all'assistenza"}
             </button>
+          </div>
+
+          {/* Bottone flottante */}
+          <div
+            className="rounded-full shadow-lg flex items-center justify-center absolute"
+            style={{
+              width: form.button_size,
+              height: form.button_size,
+              background: form.primary_color,
+              bottom: 24,
+              [form.position === "bottom-left" ? "left" : "right"]: 24,
+            }}
+          >
+            <MessageCircle size={form.button_size * 0.45} color="white" strokeWidth={2} />
           </div>
         </div>
         {!form.is_active && (
