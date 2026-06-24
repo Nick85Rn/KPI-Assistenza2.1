@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabaseClient";
-import { Save, CheckCircle2, AlertCircle, Loader2, Eye, MessageCircle } from "lucide-react";
+import { Save, CheckCircle2, AlertCircle, Loader2, Eye, MessageCircle, Copy, Code2 } from "lucide-react";
 
 const FONT_OPTIONS = [
   { value: "system", label: "Predefinito (sistema)", css: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif" },
@@ -20,6 +20,9 @@ const FONT_OPTIONS = [
 function fontCssFor(value) {
   return (FONT_OPTIONS.find((f) => f.value === value) || FONT_OPTIONS[0]).css;
 }
+
+const WIDGET_SCRIPT_URL = "https://faqpienissimo.netlify.app/widget.js";
+const WIDGET_SNIPPET = `<script src="${WIDGET_SCRIPT_URL}" async></script>`;
 
 const DEFAULT_FORM = {
   welcome_title: "",
@@ -40,6 +43,7 @@ export default function Impostazioni() {
   const [saveState, setSaveState] = useState(null); // null | "success" | "error"
   const [errorMsg, setErrorMsg] = useState(null);
   const [updatedAt, setUpdatedAt] = useState(null);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -81,6 +85,16 @@ export default function Impostazioni() {
   function handleChange(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }));
     setSaveState(null);
+  }
+
+  async function handleCopySnippet() {
+    try {
+      await navigator.clipboard.writeText(WIDGET_SNIPPET);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      console.error("Impossibile copiare:", err);
+    }
   }
 
   async function handleSave() {
@@ -299,6 +313,45 @@ export default function Impostazioni() {
           <p className="text-xs text-slate-400 mt-1">
             Si apre in una nuova tab quando il cliente clicca il bottone nel popup.
           </p>
+        </div>
+      </section>
+
+      {/* ============ CODICE DI INSTALLAZIONE ============ */}
+      <section className="bg-white border border-slate-200 rounded-lg p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <Code2 size={18} className="text-slate-400" />
+          <h2 className="text-lg font-bold text-slate-900">
+            Codice di installazione
+          </h2>
+        </div>
+        <p className="text-sm text-slate-500 mb-4">
+          Da consegnare al team Sviluppo: va incollato una sola volta, subito
+          prima della chiusura del tag <code className="bg-slate-100 px-1 rounded">&lt;/body&gt;</code> nel
+          template del Backoffice. Aspetto e testi del widget si aggiornano
+          automaticamente da qui sopra — non serve toccare di nuovo il codice
+          per le modifiche future.
+        </p>
+
+        <div className="relative">
+          <pre className="bg-slate-900 text-slate-100 text-xs rounded-lg p-4 overflow-x-auto font-mono">
+            {WIDGET_SNIPPET}
+          </pre>
+          <button
+            onClick={handleCopySnippet}
+            className="absolute top-3 right-3 inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-100 text-xs font-medium rounded-md transition-colors"
+          >
+            {copySuccess ? (
+              <>
+                <CheckCircle2 size={13} />
+                Copiato
+              </>
+            ) : (
+              <>
+                <Copy size={13} />
+                Copia
+              </>
+            )}
+          </button>
         </div>
       </section>
 
