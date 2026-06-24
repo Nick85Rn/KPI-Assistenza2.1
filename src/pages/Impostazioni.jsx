@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabaseClient";
-import { Save, CheckCircle2, AlertCircle, Loader2, Eye, MessageCircle, Copy, Code2 } from "lucide-react";
+import { Save, CheckCircle2, AlertCircle, Loader2, Eye, MessageCircle, Copy, Code2, Upload, Trash2 } from "lucide-react";
 
 const FONT_OPTIONS = [
   { value: "system", label: "Predefinito (sistema)", css: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif" },
@@ -24,6 +24,9 @@ function fontCssFor(value) {
 const WIDGET_SCRIPT_URL = "https://faqpienissimo.netlify.app/widget.js";
 const WIDGET_SNIPPET = `<script src="${WIDGET_SCRIPT_URL}" async></script>`;
 
+const MAX_ICON_SIZE_BYTES = 1024 * 1024; // 1 MB
+const ALLOWED_ICON_TYPES = ["image/png", "image/jpeg", "image/svg+xml", "image/webp"];
+
 const DEFAULT_FORM = {
   welcome_title: "",
   welcome_message: "",
@@ -34,6 +37,7 @@ const DEFAULT_FORM = {
   button_size: 56,
   font_family: "system",
   landing_url: "",
+  icon_url: null,
 };
 
 export default function Impostazioni() {
@@ -44,6 +48,8 @@ export default function Impostazioni() {
   const [errorMsg, setErrorMsg] = useState(null);
   const [updatedAt, setUpdatedAt] = useState(null);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [uploadingIcon, setUploadingIcon] = useState(false);
+  const [iconError, setIconError] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -95,6 +101,85 @@ export default function Impostazioni() {
     } catch (err) {
       console.error("Impossibile copiare:", err);
     }
+  }
+
+  async function handleIconUpload(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // reset input, permette di riselezionare lo stesso file in seguito
+    if (!file) return;
+
+    setIconError(null);
+
+    if (!ALLOWED_ICON_TYPES.includes(file.type)) {
+      setIconError("Formato non supportato. Usa PNG, JPG, SVG o WEBP.");
+      return;
+    }
+    if (file.size > MAX_ICON_SIZE_BYTES) {
+      setIconError("File troppo grande. Il limite è 1 MB.");
+      return;
+    }
+
+    setUploadingIcon(true);
+
+    // Nome file fisso (non basato sull'originale): sovrascrive sempre la
+    // stessa icona, niente accumulo di file orfani nel bucket nel tempo.
+    const ext = file.name.split(".").pop() || "png";
+    const path = `widget-icon.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("widget-assets")
+      .upload(path, file, { upsert: true, cacheControl: "3600" });
+
+    if (uploadError) {
+      setIconError(`Errore upload: ${uploadError.message}`);
+      setUploadingIcon(false);
+      return;
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from("widget-assets")
+      .getPublicUrl(path);
+
+    // Cache-busting: aggiunge un timestamp così il widget (e il browser)
+    // non mostrino una versione vecchia in cache dopo una sovrascrittura.
+    const freshUrl = `${publicUrlData.publicUrl}?v=${Date.now()}`;
+
+    const { error: dbError } = await supabase
+      .from("widget_settings")
+      .update({ icon_url: freshUrl, updated_at: new Date().toISOString() })
+      .eq("id", 1);
+
+    setUploadingIcon(false);
+
+    if (dbError) {
+      setIconError(`Errore salvataggio: ${dbError.message}`);
+      return;
+    }
+
+    setForm((prev) => ({ ...prev, icon_url: freshUrl }));
+    setUpdatedAt(new Date().toISOString());
+  }
+
+  async function handleIconRemove() {
+    setUploadingIcon(true);
+    setIconError(null);
+
+    const { error: dbError } = await supabase
+      .from("widget_settings")
+      .update({ icon_url: null, updated_at: new Date().toISOString() })
+      .eq("id", 1);
+
+    setUploadingIcon(false);
+
+    if (dbError) {
+      setIconError(`Errore: ${dbError.message}`);
+      return;
+    }
+
+    setForm((prev) => ({ ...prev, icon_url: null }));
+    setUpdatedAt(new Date().toISOString());
+    // Nota: non rimuoviamo il file dal bucket (resterebbe come storico),
+    // semplicemente non viene più referenziato da widget_settings.
   }
 
   async function handleSave() {
@@ -290,6 +375,63 @@ export default function Impostazioni() {
             </select>
           </div>
         </div>
+
+        <div className="mt-6 pt-5 border-t border-slate-100">
+          <label className="block text-sm font-medium text-slate-700 mb-2">
+            Icona del bottone (opzionale)
+          </label>
+          <div className="flex items-center gap-4">
+            <div
+              className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden"
+              style={{ background: form.primary_color }}
+            >
+              {form.icon_url ? (
+                <img src={form.icon_url} alt="Icona widget" className="w-8 h-8 object-contain" />
+              ) : (
+                <MessageCircle size={24} color="white" strokeWidth={2} />
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium text-slate-700 cursor-pointer hover:bg-slate-50 transition-colors">
+                {uploadingIcon ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Upload size={14} />
+                )}
+                {form.icon_url ? "Cambia icona" : "Carica icona"}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                  onChange={handleIconUpload}
+                  disabled={uploadingIcon}
+                  className="hidden"
+                />
+              </label>
+
+              {form.icon_url && (
+                <button
+                  type="button"
+                  onClick={handleIconRemove}
+                  disabled={uploadingIcon}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <Trash2 size={14} />
+                  Rimuovi
+                </button>
+              )}
+            </div>
+          </div>
+          <p className="text-xs text-slate-400 mt-2">
+            PNG, JPG, SVG o WEBP — max 1 MB. Se non carichi nulla, viene usata l'icona predefinita.
+          </p>
+          {iconError && (
+            <div className="flex items-center gap-1.5 text-xs text-red-700 mt-2">
+              <AlertCircle size={12} />
+              {iconError}
+            </div>
+          )}
+        </div>
       </section>
 
       {/* ============ COMPORTAMENTO ============ */}
@@ -425,7 +567,7 @@ export default function Impostazioni() {
 
           {/* Bottone flottante */}
           <div
-            className="rounded-full shadow-lg flex items-center justify-center absolute"
+            className="rounded-full shadow-lg flex items-center justify-center absolute overflow-hidden"
             style={{
               width: form.button_size,
               height: form.button_size,
@@ -434,7 +576,15 @@ export default function Impostazioni() {
               [form.position === "bottom-left" ? "left" : "right"]: 24,
             }}
           >
-            <MessageCircle size={form.button_size * 0.45} color="white" strokeWidth={2} />
+            {form.icon_url ? (
+              <img
+                src={form.icon_url}
+                alt=""
+                style={{ width: form.button_size * 0.6, height: form.button_size * 0.6, objectFit: "contain" }}
+              />
+            ) : (
+              <MessageCircle size={form.button_size * 0.45} color="white" strokeWidth={2} />
+            )}
           </div>
         </div>
         {!form.is_active && (
