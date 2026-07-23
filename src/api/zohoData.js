@@ -1062,28 +1062,41 @@ export async function getChatsByCategory({
 // MAIL ASSISTENZA — ticket via email (assistenza@pienissimo.pro)
 // ============================================================
 
-export async function getMailAssistenzaKpis(period) {
+// ============================================================
+// DIPARTIMENTI A TICKET (Mail assistenza@, Segnalazioni Zucchetti, ...)
+// Vista generica: tutte le tabelle zoho_daily_* di questo tipo hanno la
+// stessa forma (date, status, tickets_count, avg_first_response_sec,
+// avg_resolution_sec), quindi una sola funzione le copre tutte.
+// ============================================================
+
+// Stati che indicano "non ancora lavorato" (coerente con DepartmentTickets.jsx)
+const DEPT_OPEN_STATUSES = [
+  "aperto", "open", "in attesa", "on hold",
+  "ticket aperto", "ticket ri-aperto", "passato a assistenza per check",
+];
+
+function isDeptOpenStatus(s) {
+  return !!s && DEPT_OPEN_STATUSES.includes(String(s).toLowerCase());
+}
+
+export async function getDeptTicketKpis(tableName, period) {
   const { from, to } = asDateRange(period);
 
   const { data, error } = await fetchAllPaginated((pageFrom, pageTo) =>
     supabase
-      .from("zoho_daily_mail_assistenza")
+      .from(tableName)
       .select("date, status, tickets_count, avg_first_response_sec, avg_resolution_sec")
       .gte("date", from).lte("date", to)
       .range(pageFrom, pageTo)
   );
 
   if (error) {
-    console.error("getMailAssistenzaKpis:", error.message);
-    return emptyMailAssistenzaKpis();
+    console.error(`getDeptTicketKpis(${tableName}):`, error.message);
+    return emptyDeptTicketKpis();
   }
 
   const rows = data ?? [];
-  if (rows.length === 0) return emptyMailAssistenzaKpis();
-
-  // Stati che indicano "non ancora lavorato" (coerente con MailAssistenza.jsx)
-  const OPEN = ["aperto", "open", "in attesa", "on hold", "ticket aperto", "ticket ri-aperto"];
-  const isOpen = (s) => !!s && OPEN.includes(String(s).toLowerCase());
+  if (rows.length === 0) return emptyDeptTicketKpis();
 
   let tickets_total = 0;
   let tickets_open = 0;
@@ -1099,7 +1112,7 @@ export async function getMailAssistenzaKpis(period) {
   for (const r of rows) {
     const count = asNum(r.tickets_count);
     tickets_total += count;
-    if (isOpen(r.status)) tickets_open += count;
+    if (isDeptOpenStatus(r.status)) tickets_open += count;
 
     const statusKey = r.status || "(nessuno)";
     byStatusMap.set(statusKey, (byStatusMap.get(statusKey) || 0) + count);
@@ -1134,10 +1147,18 @@ export async function getMailAssistenzaKpis(period) {
   };
 }
 
-function emptyMailAssistenzaKpis() {
+function emptyDeptTicketKpis() {
   return {
     tickets_total: 0, tickets_open: 0, tickets_closed: 0,
     avg_first_response_sec: null, avg_resolution_sec: null,
     byStatus: [], byDay: [],
   };
+}
+
+export function getMailAssistenzaKpis(period) {
+  return getDeptTicketKpis("zoho_daily_mail_assistenza", period);
+}
+
+export function getSegnalazioniZucchettiKpis(period) {
+  return getDeptTicketKpis("zoho_daily_segnalazioni_zucchetti", period);
 }
