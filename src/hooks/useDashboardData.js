@@ -40,6 +40,7 @@ export function useDashboardData({
     sviluppoDetails: null,
     chatAnalysis: null,
     chatFuoriOrario: null,
+    mailAssistenza: null,
   });
 
   const requestIdRef = useRef(0);
@@ -75,6 +76,7 @@ export function useDashboardData({
         sviluppoDetailsData,
         chatAnalysisData,
         chatFuoriOrarioData,
+        mailAssistenzaData,
       ] = await Promise.all([
         getTicketKpis("assistenza", cur),
         getTicketKpis("sviluppo", cur),
@@ -96,6 +98,7 @@ export function useDashboardData({
         extras.sviluppoDetails ? getSviluppoDetails(cur) : Promise.resolve(null),
         extras.chatAnalysis ? getChatAnalysisData(cur) : Promise.resolve(null),
         getChatFuoriOrarioKpis(cur),
+        getMailAssistenzaKpis(cur),
       ]);
 
       if (reqId !== requestIdRef.current) return;
@@ -116,6 +119,7 @@ export function useDashboardData({
         sviluppoDetails: sviluppoDetailsData,
         chatAnalysis: chatAnalysisData,
         chatFuoriOrario: chatFuoriOrarioData,
+        mailAssistenza: mailAssistenzaData,
       });
     } catch (err) {
       if (reqId !== requestIdRef.current) return;
