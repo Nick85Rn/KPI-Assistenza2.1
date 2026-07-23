@@ -15,6 +15,7 @@ import {
   getAssistenzaDetails,
   getSviluppoDetails,
   getChatAnalysisData,
+  getMailAssistenzaKpis,
 } from "../api/zohoData";
 
 const BACKLOG_POLL_INTERVAL_MS = 120000; // 2 minuti
