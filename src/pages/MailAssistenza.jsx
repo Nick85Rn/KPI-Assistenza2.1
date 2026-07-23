@@ -11,6 +11,7 @@ import {
   Mail,
   Inbox,
   Timer,
+  Hourglass,
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
@@ -84,7 +85,7 @@ export default function MailAssistenza({ data }) {
           title="Ticket via email"
           hint="Richieste arrivate su assistenza@pienissimo.pro"
         />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <KPICard
             label="Ticket totali"
             value={kpis.tickets_total}
@@ -110,12 +111,20 @@ export default function MailAssistenza({ data }) {
             hint={`${formatNumber(kpis.tickets_closed)} ticket chiusi`}
           />
           <KPICard
+            label="Tempo medio risoluzione"
+            value={kpis.avg_resolution_sec}
+            icon={Hourglass}
+            intent="negative"
+            formatter={formatSeconds}
+            hint="Dalla ricezione mail alla chiusura del ticket"
+          />
+          <KPICard
             label="Tempo medio 1ª risposta"
             value={kpis.avg_first_response_sec}
             icon={Timer}
             intent="negative"
             formatter={formatSeconds}
-            hint="Dalla ricezione mail alla prima risposta"
+            hint="Disponibile solo con il feed SLA di Zoho"
           />
         </div>
       </section>
