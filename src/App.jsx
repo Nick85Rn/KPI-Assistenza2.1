@@ -11,6 +11,7 @@ import RepartoChat from "./pages/RepartoChat";
 import Formazione from "./pages/Formazione";
 import Assistenza from "./pages/Assistenza";
 import Sviluppo from "./pages/Sviluppo";
+import MailAssistenza from "./pages/MailAssistenza";
 import AnalisiChat from "./pages/AnalisiChat";
 import Report from "./pages/Report";
 import Impostazioni from "./pages/Impostazioni";
@@ -173,6 +174,7 @@ function PageContent({ activePage, data, period, periodType }) {
     case "formazione":    return <Formazione data={data} />;
     case "assistenza":    return <Assistenza data={data} />;
     case "sviluppo":      return <Sviluppo data={data} />;
+    case "mail-assistenza": return <MailAssistenza data={data} />;
     case "analisi-chat":  return <AnalisiChat data={data} />;
     default:              return <Placeholder pageKey={activePage} />;
   }
