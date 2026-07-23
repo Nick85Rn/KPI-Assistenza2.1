@@ -1058,3 +1058,86 @@ export async function getChatsByCategory({
     totalCount: count ?? 0,
   };
 }
+// ============================================================
+// MAIL ASSISTENZA — ticket via email (assistenza@pienissimo.pro)
+// ============================================================
+
+export async function getMailAssistenzaKpis(period) {
+  const { from, to } = asDateRange(period);
+
+  const { data, error } = await fetchAllPaginated((pageFrom, pageTo) =>
+    supabase
+      .from("zoho_daily_mail_assistenza")
+      .select("date, status, tickets_count, avg_first_response_sec, avg_resolution_sec")
+      .gte("date", from).lte("date", to)
+      .range(pageFrom, pageTo)
+  );
+
+  if (error) {
+    console.error("getMailAssistenzaKpis:", error.message);
+    return emptyMailAssistenzaKpis();
+  }
+
+  const rows = data ?? [];
+  if (rows.length === 0) return emptyMailAssistenzaKpis();
+
+  // Stati che indicano "non ancora lavorato" (coerente con MailAssistenza.jsx)
+  const OPEN = ["aperto", "open", "in attesa", "on hold", "ticket aperto", "ticket ri-aperto"];
+  const isOpen = (s) => !!s && OPEN.includes(String(s).toLowerCase());
+
+  let tickets_total = 0;
+  let tickets_open = 0;
+
+  // Medie pesate sul numero di ticket: ogni riga è già una media di gruppo,
+  // quindi non possiamo fare la media delle medie senza pesarla.
+  let frSum = 0, frWeight = 0;
+  let resSum = 0, resWeight = 0;
+
+  const byStatusMap = new Map();
+  const byDayMap = new Map();
+
+  for (const r of rows) {
+    const count = asNum(r.tickets_count);
+    tickets_total += count;
+    if (isOpen(r.status)) tickets_open += count;
+
+    const statusKey = r.status || "(nessuno)";
+    byStatusMap.set(statusKey, (byStatusMap.get(statusKey) || 0) + count);
+    byDayMap.set(r.date, (byDayMap.get(r.date) || 0) + count);
+
+    if (r.avg_first_response_sec != null) {
+      frSum += asNum(r.avg_first_response_sec) * count;
+      frWeight += count;
+    }
+    if (r.avg_resolution_sec != null) {
+      resSum += asNum(r.avg_resolution_sec) * count;
+      resWeight += count;
+    }
+  }
+
+  const byStatus = Array.from(byStatusMap.entries())
+    .map(([status, tickets]) => ({ status, tickets }))
+    .sort((a, b) => b.tickets - a.tickets);
+
+  const byDay = Array.from(byDayMap.entries())
+    .map(([date, tickets]) => ({ date, tickets }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return {
+    tickets_total,
+    tickets_open,
+    tickets_closed: tickets_total - tickets_open,
+    avg_first_response_sec: frWeight > 0 ? frSum / frWeight : null,
+    avg_resolution_sec: resWeight > 0 ? resSum / resWeight : null,
+    byStatus,
+    byDay,
+  };
+}
+
+function emptyMailAssistenzaKpis() {
+  return {
+    tickets_total: 0, tickets_open: 0, tickets_closed: 0,
+    avg_first_response_sec: null, avg_resolution_sec: null,
+    byStatus: [], byDay: [],
+  };
+}
