@@ -9,6 +9,7 @@ import {
   Code2,
   Bot,
   FileText,
+  Mail,
   Settings,
 } from "lucide-react";
 
@@ -18,6 +19,7 @@ export const NAV_ITEMS = [
   { key: "formazione",   label: "Formazione",    icon: GraduationCap, live: true  },
   { key: "assistenza",   label: "Assistenza",    icon: Headphones,    live: true  },
   { key: "sviluppo",     label: "Sviluppo",      icon: Code2,         live: true  },
+  { key: "mail-assistenza", label: "Mail Assistenza", icon: Mail,     live: true  },
   { key: "analisi-chat", label: "Analisi Chat",  icon: Bot,           live: true, badge: "AI" },
   { key: "report",       label: "Report",        icon: FileText,      live: true  },
   { key: "impostazioni", label: "Impostazioni",  icon: Settings,      live: true  },
