@@ -1162,3 +1162,32 @@ export function getMailAssistenzaKpis(period) {
 export function getSegnalazioniZucchettiKpis(period) {
   return getDeptTicketKpis("zoho_daily_segnalazioni_zucchetti", period);
 }
+
+// ============================================================
+// MAPPA LOCALI — dettaglio geografico installazioni
+// Non è filtrata per periodo: è uno stato attuale (snapshot), non
+// una serie temporale, quindi la pagina che la usa è indipendente
+// dal TimeframeSelector (stesso pattern di Report/Impostazioni).
+// ============================================================
+
+export async function getLocaliMappa() {
+  const { data, error } = await fetchAllPaginated((pageFrom, pageTo) =>
+    supabase
+      .from("zoho_raw_locali")
+      .select(
+        "zoho_locale_id, nome_locale, ragione_sociale, partita_iva, " +
+        "tipo_cliente, tipo_licenza, stato_cliente, attivo, " +
+        "indirizzo, citta, provincia, cap, lat, lng, " +
+        "voice_pro_attivo, whatsapp_attivo, wifi_attivo, app_clienti_attivo, " +
+        "mansionissimo_attivo, catenaria_attiva, remarketing_attivo, remarketing_plus_attivo"
+      )
+      .range(pageFrom, pageTo)
+  );
+
+  if (error) {
+    console.error("getLocaliMappa:", error.message);
+    return { locali: [], error: error.message };
+  }
+
+  return { locali: data ?? [], error: null };
+}
