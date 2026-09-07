@@ -15,6 +15,7 @@ import MailAssistenza from "./pages/MailAssistenza";
 import SegnalazioniZucchetti from "./pages/SegnalazioniZucchetti";
 import AnalisiChat from "./pages/AnalisiChat";
 import Report from "./pages/Report";
+import MappaLocali from "./pages/MappaLocali";
 import Impostazioni from "./pages/Impostazioni";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { useSyncStatus } from "./hooks/useSyncStatus";
@@ -165,6 +166,9 @@ function PageContent({ activePage, data, period, periodType }) {
   }
   if (activePage === "impostazioni") {
     return <Impostazioni />;
+  }
+  if (activePage === "mappa-locali") {
+    return <MappaLocali />;
   }
   if (data.loading && !data.current) {
     return <Loading size="lg" label="Caricamento dati Zoho..." />;
