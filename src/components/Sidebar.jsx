@@ -9,6 +9,7 @@ import {
   Code2,
   Bot,
   FileText,
+  Map,
   Mail,
   Flag,
   Settings,
@@ -23,6 +24,7 @@ export const NAV_ITEMS = [
   { key: "mail-assistenza", label: "Mail Assistenza", icon: Mail,     live: true  },
   { key: "segnalazioni-zucchetti", label: "Segn. Zucchetti", icon: Flag, live: true },
   { key: "analisi-chat", label: "Analisi Chat",  icon: Bot,           live: true, badge: "AI" },
+  { key: "mappa-locali", label: "Mappa Locali",  icon: Map,           live: true  },
   { key: "report",       label: "Report",        icon: FileText,      live: true  },
   { key: "impostazioni", label: "Impostazioni",  icon: Settings,      live: true  },
 ];
