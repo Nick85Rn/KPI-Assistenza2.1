@@ -1179,7 +1179,8 @@ export async function getLocaliMappa() {
         "tipo_cliente, tipo_licenza, stato_cliente, attivo, " +
         "indirizzo, citta, provincia, cap, lat, lng, " +
         "voice_pro_attivo, whatsapp_attivo, wifi_attivo, app_clienti_attivo, " +
-        "mansionissimo_attivo, catenaria_attiva, remarketing_attivo, remarketing_plus_attivo"
+        "mansionissimo_attivo, catenaria_attiva, remarketing_attivo, remarketing_plus_attivo, " +
+        "servizi_aggiuntivi_acquistati, pacchetto_commerciale"
       )
       .range(pageFrom, pageTo)
   );
