@@ -3,7 +3,9 @@
 // Dettaglio geografico delle installazioni: mappa Italia con un pallino
 // colorato per locale (colore = stato cliente), filtri per provincia/
 // stato/piano sopra la mappa, popup con anagrafica e moduli attivi al
-// click su un pallino.
+// click su un pallino — affiancata da un elenco scorrevole e paginato
+// degli stessi locali filtrati, con dati di contratto. Cliccando una
+// riga dell'elenco la mappa si centra sul locale e ne apre il popup.
 //
 // Indipendente dal TimeframeSelector: è uno stato attuale (snapshot),
 // non una serie temporale filtrabile per periodo — stesso principio di
@@ -13,7 +15,7 @@
 // leggero con migliaia di punti, ed evita il problema noto delle icone
 // di default che non si caricano correttamente con bundler come Vite.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, CircleMarker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import {
@@ -21,6 +23,10 @@ import {
   AlertCircle,
   Filter,
   X,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  LocateFixed,
   Phone as PhoneIcon,
   MessageCircle,
   Wifi,
@@ -36,6 +42,9 @@ import { getLocaliMappa } from "../api/zohoData";
 // Centro/zoom iniziale: Italia intera
 const ITALY_CENTER = [42.5, 12.5];
 const ITALY_ZOOM = 6;
+const FLY_TO_ZOOM = 14;
+
+const LIST_PAGE_SIZE = 30;
 
 // Colore del pallino in base allo stato cliente. Il modulo Locali ha
 // diversi stati testuali liberi (vedi query esplorative fatte in
@@ -74,6 +83,16 @@ export default function MappaLocali() {
   const [filtroProvincia, setFiltroProvincia] = useState("");
   const [filtroStato, setFiltroStato] = useState("");
   const [filtroLicenza, setFiltroLicenza] = useState("");
+  const [ricerca, setRicerca] = useState("");
+  const [pagina, setPagina] = useState(0);
+  const [selezionatoId, setSelezionatoId] = useState(null);
+
+  // Riferimenti imperativi verso l'istanza Leaflet: servono per
+  // "volare" alle coordinate di un locale e aprirne il popup quando si
+  // clicca una riga dell'elenco, senza dover ricostruire lo stato del
+  // componente mappa.
+  const mapRef = useRef(null);
+  const markersRef = useRef({});
 
   useEffect(() => {
     let mounted = true;
@@ -115,6 +134,28 @@ export default function MappaLocali() {
     });
   }, [locali, filtroProvincia, filtroStato, filtroLicenza]);
 
+  // Ricerca testuale (nome locale o ragione sociale), applicata sopra
+  // ai filtri per provincia/stato/piano — usata solo per l'elenco, la
+  // mappa continua a mostrare tutti i risultati filtrati.
+  const filtratiConRicerca = useMemo(() => {
+    if (!ricerca.trim()) return filtrati;
+    const q = ricerca.trim().toLowerCase();
+    return filtrati.filter(
+      (loc) =>
+        loc.nome_locale?.toLowerCase().includes(q) ||
+        loc.ragione_sociale?.toLowerCase().includes(q)
+    );
+  }, [filtrati, ricerca]);
+
+  // Elenco ordinato alfabeticamente, per una consultazione prevedibile
+  const elencoOrdinato = useMemo(
+    () =>
+      [...filtratiConRicerca].sort((a, b) =>
+        (a.nome_locale || "").localeCompare(b.nome_locale || "", "it")
+      ),
+    [filtratiConRicerca]
+  );
+
   const conCoordinate = useMemo(
     () => filtrati.filter((l) => l.lat != null && l.lng != null),
     [filtrati]
@@ -122,10 +163,42 @@ export default function MappaLocali() {
 
   const hasActiveFilters = filtroProvincia || filtroStato || filtroLicenza;
 
+  // Paginazione elenco: azzerata ogni volta che cambia il set filtrato,
+  // per non restare "bloccati" su una pagina che non esiste più.
+  useEffect(() => {
+    setPagina(0);
+  }, [filtroProvincia, filtroStato, filtroLicenza, ricerca]);
+
+  const totalPagine = Math.max(1, Math.ceil(elencoOrdinato.length / LIST_PAGE_SIZE));
+  const paginaClamped = Math.min(pagina, totalPagine - 1);
+  const elencoPagina = elencoOrdinato.slice(
+    paginaClamped * LIST_PAGE_SIZE,
+    paginaClamped * LIST_PAGE_SIZE + LIST_PAGE_SIZE
+  );
+
   function resetFiltri() {
     setFiltroProvincia("");
     setFiltroStato("");
     setFiltroLicenza("");
+    setRicerca("");
+  }
+
+  // Click su una riga dell'elenco: centra la mappa sul locale (se ha
+  // coordinate) e ne apre il popup, per collegare visivamente elenco e
+  // mappa senza dover cercare a occhio il pallino corrispondente.
+  function handleRowClick(loc) {
+    setSelezionatoId(loc.zoho_locale_id);
+    if (loc.lat == null || loc.lng == null) return;
+    const map = mapRef.current;
+    if (map) {
+      map.flyTo([loc.lat, loc.lng], Math.max(map.getZoom(), FLY_TO_ZOOM), {
+        duration: 0.6,
+      });
+    }
+    const marker = markersRef.current[loc.zoho_locale_id];
+    if (marker) {
+      setTimeout(() => marker.openPopup(), 350);
+    }
   }
 
   if (loading) {
@@ -201,40 +274,120 @@ export default function MappaLocali() {
           ))}
         </div>
 
-        {/* Mappa */}
-        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden" style={{ height: 600 }}>
-          <MapContainer
-            center={ITALY_CENTER}
-            zoom={ITALY_ZOOM}
-            style={{ height: "100%", width: "100%" }}
-            scrollWheelZoom={true}
+        {/* Mappa + elenco affiancato */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-4">
+          {/* Mappa */}
+          <div
+            className="bg-white border border-slate-200 rounded-lg overflow-hidden"
+            style={{ height: 600 }}
           >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            {conCoordinate.map((loc) => {
-              const group = statoGroup(loc.stato_cliente, loc.attivo);
-              const color = STATO_GROUPS[group].color;
-              return (
-                <CircleMarker
-                  key={loc.zoho_locale_id}
-                  center={[loc.lat, loc.lng]}
-                  radius={6}
-                  pathOptions={{
-                    color,
-                    fillColor: color,
-                    fillOpacity: 0.75,
-                    weight: 1.5,
-                  }}
+            <MapContainer
+              ref={mapRef}
+              center={ITALY_CENTER}
+              zoom={ITALY_ZOOM}
+              style={{ height: "100%", width: "100%" }}
+              scrollWheelZoom={true}
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              {conCoordinate.map((loc) => {
+                const group = statoGroup(loc.stato_cliente, loc.attivo);
+                const color = STATO_GROUPS[group].color;
+                const isSelected = loc.zoho_locale_id === selezionatoId;
+                return (
+                  <CircleMarker
+                    key={loc.zoho_locale_id}
+                    ref={(instance) => {
+                      if (instance) markersRef.current[loc.zoho_locale_id] = instance;
+                    }}
+                    center={[loc.lat, loc.lng]}
+                    radius={isSelected ? 9 : 6}
+                    pathOptions={{
+                      color,
+                      fillColor: color,
+                      fillOpacity: isSelected ? 0.95 : 0.75,
+                      weight: isSelected ? 3 : 1.5,
+                    }}
+                    eventHandlers={{
+                      click: () => setSelezionatoId(loc.zoho_locale_id),
+                    }}
+                  >
+                    <Popup>
+                      <LocalePopup locale={loc} />
+                    </Popup>
+                  </CircleMarker>
+                );
+              })}
+            </MapContainer>
+          </div>
+
+          {/* Elenco locali */}
+          <div
+            className="bg-white border border-slate-200 rounded-lg flex flex-col overflow-hidden"
+            style={{ height: 600 }}
+          >
+            <div className="p-3 border-b border-slate-100">
+              <div className="relative">
+                <Search
+                  size={14}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+                <input
+                  type="text"
+                  value={ricerca}
+                  onChange={(e) => setRicerca(e.target.value)}
+                  placeholder="Cerca per nome o ragione sociale..."
+                  className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div className="text-xs text-slate-400 mt-1.5">
+                {elencoOrdinato.length.toLocaleString("it-IT")} risultati
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+              {elencoPagina.length === 0 ? (
+                <div className="p-6 text-center text-sm text-slate-400">
+                  Nessun locale corrisponde alla ricerca.
+                </div>
+              ) : (
+                elencoPagina.map((loc) => (
+                  <ListRow
+                    key={loc.zoho_locale_id}
+                    locale={loc}
+                    selected={loc.zoho_locale_id === selezionatoId}
+                    onClick={() => handleRowClick(loc)}
+                  />
+                ))
+              )}
+            </div>
+
+            {totalPagine > 1 && (
+              <div className="flex items-center justify-between px-3 py-2 border-t border-slate-100 text-xs text-slate-500">
+                <button
+                  onClick={() => setPagina((p) => Math.max(0, p - 1))}
+                  disabled={paginaClamped === 0}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-transparent"
                 >
-                  <Popup>
-                    <LocalePopup locale={loc} />
-                  </Popup>
-                </CircleMarker>
-              );
-            })}
-          </MapContainer>
+                  <ChevronLeft size={14} />
+                  Prec.
+                </button>
+                <span>
+                  Pagina {paginaClamped + 1} di {totalPagine}
+                </span>
+                <button
+                  onClick={() => setPagina((p) => Math.min(totalPagine - 1, p + 1))}
+                  disabled={paginaClamped >= totalPagine - 1}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-transparent"
+                >
+                  Succ.
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {filtrati.length > conCoordinate.length && (
@@ -266,6 +419,72 @@ function FilterSelect({ label, value, onChange, options }) {
         ))}
       </select>
     </div>
+  );
+}
+
+// Riga dell'elenco laterale: nome, indirizzo breve, badge stato/piano,
+// icone dei moduli attivi. Cliccabile: seleziona sempre, sposta la
+// mappa solo se il locale ha coordinate (gestito in handleRowClick).
+function ListRow({ locale: loc, selected, onClick }) {
+  const moduliAttivi = MODULI.filter((m) => loc[m.key] === true);
+  const group = statoGroup(loc.stato_cliente, loc.attivo);
+  const color = STATO_GROUPS[group].color;
+  const cittaProvincia = [loc.citta, loc.provincia].filter(Boolean).join(", ");
+  const hasCoords = loc.lat != null && loc.lng != null;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full text-left px-3 py-2.5 transition-colors ${
+        selected ? "bg-indigo-50" : "hover:bg-slate-50"
+      }`}
+    >
+      <div className="flex items-start gap-2">
+        <span
+          className="inline-block w-2 h-2 rounded-full mt-1.5 flex-shrink-0"
+          style={{ background: color }}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-sm text-slate-900 truncate">
+              {loc.nome_locale}
+            </span>
+            {!hasCoords && (
+              <span
+                title="Non ancora geolocalizzato"
+                className="flex-shrink-0 text-slate-300"
+              >
+                <MapPin size={11} />
+              </span>
+            )}
+          </div>
+          {cittaProvincia && (
+            <div className="text-xs text-slate-500 truncate">{cittaProvincia}</div>
+          )}
+          <div className="flex flex-wrap items-center gap-1 mt-1">
+            {loc.stato_cliente && (
+              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">
+                {loc.stato_cliente}
+              </span>
+            )}
+            {loc.tipo_licenza && (
+              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 uppercase">
+                {loc.tipo_licenza}
+              </span>
+            )}
+            {moduliAttivi.map((m) => (
+              <span key={m.key} title={m.label} className="text-emerald-600">
+                <m.icon size={11} />
+              </span>
+            ))}
+          </div>
+        </div>
+        {selected && hasCoords && (
+          <LocateFixed size={13} className="text-indigo-500 flex-shrink-0 mt-1" />
+        )}
+      </div>
+    </button>
   );
 }
 
