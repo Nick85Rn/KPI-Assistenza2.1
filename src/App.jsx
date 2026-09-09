@@ -17,6 +17,8 @@ import AnalisiChat from "./pages/AnalisiChat";
 import Report from "./pages/Report";
 import MappaLocali from "./pages/MappaLocali";
 import Impostazioni from "./pages/Impostazioni";
+import AuthGate from "./AuthGate";
+import { supabase } from "./supabaseClient";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { useSyncStatus } from "./hooks/useSyncStatus";
 import { periodBounds, previousPeriod, yoyPeriod, formatPeriodLabel } from "./lib/periods";
@@ -68,7 +70,7 @@ class ErrorBoundary extends Component {
   }
 }
 
-function AppInner() {
+function AppInner({ session }) {
   const [activePage, setActivePage] = useState("cruscotto");
   const [period, setPeriod] = useState({ type: "month", anchor: new Date() });
 
@@ -105,7 +107,12 @@ function AppInner() {
 
   return (
     <div className="h-screen flex bg-slate-50 text-slate-900 overflow-hidden">
-      <Sidebar active={activePage} onChange={setActivePage} />
+      <Sidebar
+        active={activePage}
+        onChange={setActivePage}
+        userEmail={session?.user?.email}
+        onLogout={() => supabase.auth.signOut()}
+      />
 
       <main className="flex-1 min-w-0 flex flex-col overflow-y-auto">
         <header className="sticky top-0 z-20 bg-white border-b border-slate-200 px-8 py-4">
@@ -222,8 +229,12 @@ function toIso(d) {
 
 export default function App() {
   return (
-    <ErrorBoundary>
-      <AppInner />
-    </ErrorBoundary>
+    <AuthGate>
+      {(session) => (
+        <ErrorBoundary>
+          <AppInner session={session} />
+        </ErrorBoundary>
+      )}
+    </AuthGate>
   );
 }
