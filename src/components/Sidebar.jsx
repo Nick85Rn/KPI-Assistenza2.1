@@ -13,6 +13,7 @@ import {
   Mail,
   Flag,
   Settings,
+  LogOut,
 } from "lucide-react";
 
 export const NAV_ITEMS = [
@@ -29,7 +30,7 @@ export const NAV_ITEMS = [
   { key: "impostazioni", label: "Impostazioni",  icon: Settings,      live: true  },
 ];
 
-export default function Sidebar({ active, onChange }) {
+export default function Sidebar({ active, onChange, userEmail, onLogout }) {
   return (
     <aside className="w-60 bg-slate-900 text-slate-100 flex-shrink-0 flex flex-col">
       {/* Logo */}
@@ -90,8 +91,24 @@ export default function Sidebar({ active, onChange }) {
       </nav>
 
       {/* Footer */}
-      <div className="px-4 py-3 border-t border-slate-800 text-[10px] text-slate-500">
-        Connesso a Zoho via Supabase
+      <div className="px-4 py-3 border-t border-slate-800">
+        {userEmail && (
+          <div className="text-[11px] text-slate-400 truncate mb-2" title={userEmail}>
+            {userEmail}
+          </div>
+        )}
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] text-slate-500">Connesso a Zoho via Supabase</span>
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              title="Esci"
+              className="text-slate-500 hover:text-red-400 transition-colors flex-shrink-0 ml-2"
+            >
+              <LogOut size={14} />
+            </button>
+          )}
+        </div>
       </div>
     </aside>
   );
