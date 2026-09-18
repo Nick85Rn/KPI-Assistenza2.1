@@ -1200,11 +1200,13 @@ export async function getLocaliMappa() {
 // assistenza_per_provenienza è già aggregata lato database.
 // ============================================================
 
-export async function getAssistenzaPerProvenienza() {
-  const { data, error } = await supabase
-    .from("assistenza_per_provenienza")
-    .select("provenienza, chat_totali, sessioni_formazione")
-    .order("chat_totali", { ascending: false });
+export async function getAssistenzaPerProvenienza(period) {
+  const { from, to } = asDateRange(period);
+
+  const { data, error } = await supabase.rpc("get_assistenza_per_provenienza", {
+    p_from: from,
+    p_to: to,
+  });
 
   if (error) {
     console.error("getAssistenzaPerProvenienza:", error.message);
