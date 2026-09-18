@@ -229,8 +229,13 @@ function ProvenienzaSection({ righe, loading, error }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {righe.map((r) => (
-            <tr key={r.provenienza} className="hover:bg-slate-50">
+          {righe.map((r) => {
+            const isZucchetti = r.provenienza?.startsWith("Zucchetti");
+            return (
+            <tr
+              key={r.provenienza}
+              className={isZucchetti ? "bg-sky-50 hover:bg-sky-100" : "hover:bg-slate-50"}
+            >
               <td className="px-6 py-3 font-medium text-slate-900">{r.provenienza}</td>
               <td className="px-6 py-3">
                 <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
@@ -253,7 +258,8 @@ function ProvenienzaSection({ righe, loading, error }) {
                 {formatMinutes(r.tempo_totale_formazione_min || 0)}
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
         <tfoot>
           <tr className="bg-slate-50 font-semibold">
