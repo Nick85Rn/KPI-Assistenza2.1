@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { getReportData, getAssistenzaPerProvenienza } from "../api/zohoData";
 import { downloadPdf, generateEmailText } from "../lib/reportGenerator";
-import { formatNumber, formatSeconds } from "../lib/format";
+import { formatNumber, formatSeconds, formatMinutes } from "../lib/format";
 import SectionTitle from "../components/SectionTitle";
 
 export default function Report({ period, periodType }) {
@@ -54,7 +54,8 @@ export default function Report({ period, periodType }) {
   useEffect(() => {
     let cancelled = false;
     setProvenienzaLoading(true);
-    getAssistenzaPerProvenienza()
+    setProvenienzaError(null);
+    getAssistenzaPerProvenienza(period)
       .then(({ righe, error }) => {
         if (cancelled) return;
         if (error) setProvenienzaError(error);
@@ -62,7 +63,7 @@ export default function Report({ period, periodType }) {
         setProvenienzaLoading(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [period.start?.getTime(), period.end?.getTime()]);
 
   const handleDownloadPdf = async () => {
     if (!reportData) return;
@@ -175,8 +176,10 @@ function ProvenienzaSection({ righe, loading, error }) {
       (acc, r) => ({
         chat: acc.chat + (r.chat_totali || 0),
         formazione: acc.formazione + (r.sessioni_formazione || 0),
+        tempoChat: acc.tempoChat + (r.tempo_totale_chat_sec || 0),
+        tempoFormazione: acc.tempoFormazione + (r.tempo_totale_formazione_min || 0),
       }),
-      { chat: 0, formazione: 0 }
+      { chat: 0, formazione: 0, tempoChat: 0, tempoFormazione: 0 }
     );
   }, [righe]);
 
@@ -208,7 +211,7 @@ function ProvenienzaSection({ righe, loading, error }) {
           Impatto sull'assistenza per provenienza cliente
         </div>
         <div className="text-sm text-slate-500 mt-1">
-          Dato complessivo (tutti i periodi), non legato al periodo selezionato sopra.
+          Filtrato sullo stesso periodo selezionato in alto (Giorno/Settimana/Mese/Anno).
           Le chat sono collegate all'azienda tramite email del visitatore; copertura
           parziale (le chat da email non riconosciute non sono incluse).
         </div>
@@ -220,7 +223,9 @@ function ProvenienzaSection({ righe, loading, error }) {
             <th className="text-left px-6 py-3 font-semibold">Provenienza</th>
             <th className="px-6 py-3 font-semibold w-1/3">Chat</th>
             <th className="text-right px-6 py-3 font-semibold">N. chat</th>
+            <th className="text-right px-6 py-3 font-semibold">Tempo chat</th>
             <th className="text-right px-6 py-3 font-semibold">Sessioni formazione</th>
+            <th className="text-right px-6 py-3 font-semibold">Tempo formazione</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -238,8 +243,14 @@ function ProvenienzaSection({ righe, loading, error }) {
               <td className="px-6 py-3 text-right tabular-nums font-semibold">
                 {formatNumber(r.chat_totali || 0)}
               </td>
+              <td className="px-6 py-3 text-right tabular-nums text-slate-500">
+                {formatSeconds(r.tempo_totale_chat_sec || 0)}
+              </td>
               <td className="px-6 py-3 text-right tabular-nums text-slate-600">
                 {formatNumber(r.sessioni_formazione || 0)}
+              </td>
+              <td className="px-6 py-3 text-right tabular-nums text-slate-500">
+                {formatMinutes(r.tempo_totale_formazione_min || 0)}
               </td>
             </tr>
           ))}
@@ -249,7 +260,9 @@ function ProvenienzaSection({ righe, loading, error }) {
             <td className="px-6 py-3 text-slate-700">Totale</td>
             <td className="px-6 py-3"></td>
             <td className="px-6 py-3 text-right tabular-nums">{formatNumber(totali.chat)}</td>
+            <td className="px-6 py-3 text-right tabular-nums">{formatSeconds(totali.tempoChat)}</td>
             <td className="px-6 py-3 text-right tabular-nums">{formatNumber(totali.formazione)}</td>
+            <td className="px-6 py-3 text-right tabular-nums">{formatMinutes(totali.tempoFormazione)}</td>
           </tr>
         </tfoot>
       </table>
