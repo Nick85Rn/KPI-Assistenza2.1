@@ -1,7 +1,7 @@
 // src/pages/Report.jsx
 // Pagina Report: anteprima del periodo selezionato + pulsanti per scaricare PDF / copiare testo email.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   FileText,
   Download,
@@ -11,7 +11,7 @@ import {
   AlertCircle,
   Loader2,
 } from "lucide-react";
-import { getReportData } from "../api/zohoData";
+import { getReportData, getAssistenzaPerProvenienza } from "../api/zohoData";
 import { downloadPdf, generateEmailText } from "../lib/reportGenerator";
 import { formatNumber, formatSeconds } from "../lib/format";
 import SectionTitle from "../components/SectionTitle";
@@ -22,6 +22,12 @@ export default function Report({ period, periodType }) {
   const [error, setError] = useState(null);
   const [emailCopied, setEmailCopied] = useState(false);
   const [pdfGenerating, setPdfGenerating] = useState(false);
+
+  // Statistica provenienza: snapshot complessivo, indipendente dal
+  // periodo selezionato in alto (stesso principio della Mappa Locali).
+  const [provenienzaData, setProvenienzaData] = useState(null);
+  const [provenienzaLoading, setProvenienzaLoading] = useState(true);
+  const [provenienzaError, setProvenienzaError] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,6 +50,19 @@ export default function Report({ period, periodType }) {
 
     return () => { cancelled = true; };
   }, [period.start?.getTime(), period.end?.getTime()]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setProvenienzaLoading(true);
+    getAssistenzaPerProvenienza()
+      .then(({ righe, error }) => {
+        if (cancelled) return;
+        if (error) setProvenienzaError(error);
+        else setProvenienzaData(righe);
+        setProvenienzaLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleDownloadPdf = async () => {
     if (!reportData) return;
@@ -133,6 +152,107 @@ export default function Report({ period, periodType }) {
 
       {/* Anteprima */}
       <ReportPreview data={reportData} periodType={periodType} />
+
+      {/* Impatto assistenza per provenienza — snapshot complessivo,
+          non legato al periodo selezionato sopra */}
+      <ProvenienzaSection
+        righe={provenienzaData}
+        loading={provenienzaLoading}
+        error={provenienzaError}
+      />
+    </div>
+  );
+}
+
+// =====================================================
+// Impatto assistenza per provenienza cliente
+// =====================================================
+
+function ProvenienzaSection({ righe, loading, error }) {
+  const totali = useMemo(() => {
+    if (!righe) return { chat: 0, formazione: 0 };
+    return righe.reduce(
+      (acc, r) => ({
+        chat: acc.chat + (r.chat_totali || 0),
+        formazione: acc.formazione + (r.sessioni_formazione || 0),
+      }),
+      { chat: 0, formazione: 0 }
+    );
+  }, [righe]);
+
+  if (loading) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-lg p-8 flex items-center justify-center">
+        <Loader2 className="animate-spin text-slate-400 mr-2" size={20} />
+        <span className="text-sm text-slate-500">Caricamento dati provenienza...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-5 text-sm text-red-700">
+        Errore nel caricamento della statistica provenienza: {error}
+      </div>
+    );
+  }
+
+  if (!righe || righe.length === 0) return null;
+
+  const maxChat = Math.max(...righe.map((r) => r.chat_totali || 0), 1);
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+      <div className="px-6 py-4 border-b border-slate-100">
+        <div className="font-semibold text-slate-900 flex items-center gap-2">
+          Impatto sull'assistenza per provenienza cliente
+        </div>
+        <div className="text-sm text-slate-500 mt-1">
+          Dato complessivo (tutti i periodi), non legato al periodo selezionato sopra.
+          Le chat sono collegate all'azienda tramite email del visitatore; copertura
+          parziale (le chat da email non riconosciute non sono incluse).
+        </div>
+      </div>
+
+      <table className="w-full text-sm">
+        <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+          <tr>
+            <th className="text-left px-6 py-3 font-semibold">Provenienza</th>
+            <th className="px-6 py-3 font-semibold w-1/3">Chat</th>
+            <th className="text-right px-6 py-3 font-semibold">N. chat</th>
+            <th className="text-right px-6 py-3 font-semibold">Sessioni formazione</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {righe.map((r) => (
+            <tr key={r.provenienza} className="hover:bg-slate-50">
+              <td className="px-6 py-3 font-medium text-slate-900">{r.provenienza}</td>
+              <td className="px-6 py-3">
+                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-indigo-500 rounded-full"
+                    style={{ width: `${((r.chat_totali || 0) / maxChat) * 100}%` }}
+                  />
+                </div>
+              </td>
+              <td className="px-6 py-3 text-right tabular-nums font-semibold">
+                {formatNumber(r.chat_totali || 0)}
+              </td>
+              <td className="px-6 py-3 text-right tabular-nums text-slate-600">
+                {formatNumber(r.sessioni_formazione || 0)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="bg-slate-50 font-semibold">
+            <td className="px-6 py-3 text-slate-700">Totale</td>
+            <td className="px-6 py-3"></td>
+            <td className="px-6 py-3 text-right tabular-nums">{formatNumber(totali.chat)}</td>
+            <td className="px-6 py-3 text-right tabular-nums">{formatNumber(totali.formazione)}</td>
+          </tr>
+        </tfoot>
+      </table>
     </div>
   );
 }
