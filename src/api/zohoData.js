@@ -1192,3 +1192,24 @@ export async function getLocaliMappa() {
 
   return { locali: data ?? [], error: null };
 }
+
+// ============================================================
+// ASSISTENZA PER PROVENIENZA — chat + formazione per canale di
+// acquisizione cliente. Snapshot complessivo (non filtrato per
+// periodo), stesso principio di getLocaliMappa: la tabella
+// assistenza_per_provenienza è già aggregata lato database.
+// ============================================================
+
+export async function getAssistenzaPerProvenienza() {
+  const { data, error } = await supabase
+    .from("assistenza_per_provenienza")
+    .select("provenienza, chat_totali, sessioni_formazione")
+    .order("chat_totali", { ascending: false });
+
+  if (error) {
+    console.error("getAssistenzaPerProvenienza:", error.message);
+    return { righe: [], error: error.message };
+  }
+
+  return { righe: data ?? [], error: null };
+}
