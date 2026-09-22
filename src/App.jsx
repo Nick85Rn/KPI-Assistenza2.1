@@ -13,6 +13,7 @@ import Assistenza from "./pages/Assistenza";
 import Sviluppo from "./pages/Sviluppo";
 import MailAssistenza from "./pages/MailAssistenza";
 import SegnalazioniZucchetti from "./pages/SegnalazioniZucchetti";
+import WhatsappAssistenza from "./pages/WhatsappAssistenza";
 import AnalisiChat from "./pages/AnalisiChat";
 import Report from "./pages/Report";
 import MappaLocali from "./pages/MappaLocali";
@@ -188,6 +189,7 @@ function PageContent({ activePage, data, period, periodType }) {
     case "sviluppo":      return <Sviluppo data={data} />;
     case "mail-assistenza": return <MailAssistenza data={data} />;
     case "segnalazioni-zucchetti": return <SegnalazioniZucchetti data={data} />;
+    case "whatsapp-assistenza": return <WhatsappAssistenza data={data} />;
     case "analisi-chat":  return <AnalisiChat data={data} />;
     default:              return <Placeholder pageKey={activePage} />;
   }
