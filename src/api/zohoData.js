@@ -1163,6 +1163,10 @@ export function getSegnalazioniZucchettiKpis(period) {
   return getDeptTicketKpis("zoho_daily_segnalazioni_zucchetti", period);
 }
 
+export function getWhatsappAssistenzaKpis(period) {
+  return getDeptTicketKpis("zoho_daily_whatsapp_assistenza", period);
+}
+
 // ============================================================
 // MAPPA LOCALI — dettaglio geografico installazioni
 // Non è filtrata per periodo: è uno stato attuale (snapshot), non
