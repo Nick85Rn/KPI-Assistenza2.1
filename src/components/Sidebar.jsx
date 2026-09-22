@@ -12,6 +12,7 @@ import {
   Map,
   Mail,
   Flag,
+  MessageCircle,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -24,6 +25,7 @@ export const NAV_ITEMS = [
   { key: "sviluppo",     label: "Sviluppo",      icon: Code2,         live: true  },
   { key: "mail-assistenza", label: "Mail Assistenza", icon: Mail,     live: true  },
   { key: "segnalazioni-zucchetti", label: "Segn. Zucchetti", icon: Flag, live: true },
+  { key: "whatsapp-assistenza", label: "WhatsApp Assistenza", icon: MessageCircle, live: true },
   { key: "analisi-chat", label: "Analisi Chat",  icon: Bot,           live: true, badge: "AI" },
   { key: "mappa-locali", label: "Mappa Locali",  icon: Map,           live: true  },
   { key: "report",       label: "Report",        icon: FileText,      live: true  },
