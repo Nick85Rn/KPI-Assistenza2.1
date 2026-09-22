@@ -17,6 +17,7 @@ import {
   getChatAnalysisData,
   getMailAssistenzaKpis,
   getSegnalazioniZucchettiKpis,
+  getWhatsappAssistenzaKpis,
 } from "../api/zohoData";
 
 const BACKLOG_POLL_INTERVAL_MS = 120000; // 2 minuti
@@ -43,6 +44,7 @@ export function useDashboardData({
     chatFuoriOrario: null,
     mailAssistenza: null,
     segnalazioniZucchetti: null,
+    whatsappAssistenza: null,
   });
 
   const requestIdRef = useRef(0);
@@ -80,6 +82,7 @@ export function useDashboardData({
         chatFuoriOrarioData,
         mailAssistenzaData,
         segnalazioniZucchettiData,
+        whatsappAssistenzaData,
       ] = await Promise.all([
         getTicketKpis("assistenza", cur),
         getTicketKpis("sviluppo", cur),
@@ -103,6 +106,7 @@ export function useDashboardData({
         getChatFuoriOrarioKpis(cur),
         getMailAssistenzaKpis(cur),
         getSegnalazioniZucchettiKpis(cur),
+        getWhatsappAssistenzaKpis(cur),
       ]);
 
       if (reqId !== requestIdRef.current) return;
@@ -125,6 +129,7 @@ export function useDashboardData({
         chatFuoriOrario: chatFuoriOrarioData,
         mailAssistenza: mailAssistenzaData,
         segnalazioniZucchetti: segnalazioniZucchettiData,
+        whatsappAssistenza: whatsappAssistenzaData,
       });
     } catch (err) {
       if (reqId !== requestIdRef.current) return;
