@@ -14,6 +14,7 @@ import Sviluppo from "./pages/Sviluppo";
 import MailAssistenza from "./pages/MailAssistenza";
 import SegnalazioniZucchetti from "./pages/SegnalazioniZucchetti";
 import WhatsappAssistenza from "./pages/WhatsappAssistenza";
+import ChatbotFaq from "./pages/ChatbotFaq";
 import AnalisiChat from "./pages/AnalisiChat";
 import Report from "./pages/Report";
 import MappaLocali from "./pages/MappaLocali";
@@ -177,6 +178,9 @@ function PageContent({ activePage, data, period, periodType }) {
   }
   if (activePage === "mappa-locali") {
     return <MappaLocali />;
+  }
+  if (activePage === "chatbot-faq") {
+    return <ChatbotFaq period={period} />;
   }
   if (data.loading && !data.current) {
     return <Loading size="lg" label="Caricamento dati Zoho..." />;
