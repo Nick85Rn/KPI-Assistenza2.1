@@ -26,6 +26,7 @@ export const NAV_ITEMS = [
   { key: "mail-assistenza", label: "Mail Assistenza", icon: Mail,     live: true  },
   { key: "segnalazioni-zucchetti", label: "Segn. Zucchetti", icon: Flag, live: true },
   { key: "whatsapp-assistenza", label: "WhatsApp Assistenza", icon: MessageCircle, live: true },
+  { key: "chatbot-faq", label: "Chatbot AI", icon: Bot, live: true },
   { key: "analisi-chat", label: "Analisi Chat",  icon: Bot,           live: true, badge: "AI" },
   { key: "mappa-locali", label: "Mappa Locali",  icon: Map,           live: true  },
   { key: "report",       label: "Report",        icon: FileText,      live: true  },
