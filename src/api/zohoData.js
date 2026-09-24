@@ -1245,3 +1245,75 @@ export async function getChatbotFunnel(period) {
   const row = (data ?? [])[0] ?? null;
   return { funnel: row, error: null };
 }
+
+// ============================================================
+// CONVERSAZIONI E DOMANDE SENZA RISPOSTA — chatbot AI
+// Elenco sessioni (paginato) + trascrizione completa di una sessione
+// + elenco domande fuori knowledge base / con feedback negativo.
+// ============================================================
+
+const CHAT_PAGE_SIZE = 20;
+
+export async function getChatSessions(period, page = 0) {
+  const { from, to } = asDateRange(period);
+  const offset = page * CHAT_PAGE_SIZE;
+
+  const [{ data: rows, error: rowsError }, { data: totalRaw, error: countError }] =
+    await Promise.all([
+      supabase.rpc("get_chat_sessions", {
+        p_from: from, p_to: to, p_limit: CHAT_PAGE_SIZE, p_offset: offset,
+      }),
+      supabase.rpc("count_chat_sessions", { p_from: from, p_to: to }),
+    ]);
+
+  if (rowsError || countError) {
+    const msg = rowsError?.message || countError?.message;
+    console.error("getChatSessions:", msg);
+    return { sessioni: [], total: 0, pageSize: CHAT_PAGE_SIZE, error: msg };
+  }
+
+  return {
+    sessioni: rows ?? [],
+    total: totalRaw ?? 0,
+    pageSize: CHAT_PAGE_SIZE,
+    error: null,
+  };
+}
+
+export async function getChatSessionDetail(sessionId) {
+  const { data, error } = await supabase.rpc("get_chat_session_detail", {
+    p_session_id: sessionId,
+  });
+
+  if (error) {
+    console.error("getChatSessionDetail:", error.message);
+    return { interazioni: [], error: error.message };
+  }
+  return { interazioni: data ?? [], error: null };
+}
+
+export async function getUnansweredQuestions(period, page = 0) {
+  const { from, to } = asDateRange(period);
+  const offset = page * CHAT_PAGE_SIZE;
+
+  const [{ data: rows, error: rowsError }, { data: totalRaw, error: countError }] =
+    await Promise.all([
+      supabase.rpc("get_unanswered_questions", {
+        p_from: from, p_to: to, p_limit: CHAT_PAGE_SIZE, p_offset: offset,
+      }),
+      supabase.rpc("count_unanswered_questions", { p_from: from, p_to: to }),
+    ]);
+
+  if (rowsError || countError) {
+    const msg = rowsError?.message || countError?.message;
+    console.error("getUnansweredQuestions:", msg);
+    return { domande: [], total: 0, pageSize: CHAT_PAGE_SIZE, error: msg };
+  }
+
+  return {
+    domande: rows ?? [],
+    total: totalRaw ?? 0,
+    pageSize: CHAT_PAGE_SIZE,
+    error: null,
+  };
+}
