@@ -1219,3 +1219,29 @@ export async function getAssistenzaPerProvenienza(period) {
 
   return { righe: data ?? [], error: null };
 }
+
+// ============================================================
+// FUNNEL CHATBOT AI — efficacia del chatbot pienissimo-faq
+// (chat_ai_interactions): chi risolve da solo, chi viene escalato,
+// esito dell'escalation, feedback, qualità delle risposte.
+// Filtrato per periodo via RPC, stesso principio di
+// getAssistenzaPerProvenienza.
+// ============================================================
+
+export async function getChatbotFunnel(period) {
+  const { from, to } = asDateRange(period);
+
+  const { data, error } = await supabase.rpc("get_chatbot_funnel", {
+    p_from: from,
+    p_to: to,
+  });
+
+  if (error) {
+    console.error("getChatbotFunnel:", error.message);
+    return { funnel: null, error: error.message };
+  }
+
+  // La RPC ritorna un array con una singola riga (RETURNS TABLE)
+  const row = (data ?? [])[0] ?? null;
+  return { funnel: row, error: null };
+}
