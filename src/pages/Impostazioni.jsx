@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabaseClient";
-import { Save, CheckCircle2, AlertCircle, Loader2, Eye, MessageCircle, Copy, Code2, Upload, Trash2, ExternalLink } from "lucide-react";
+import { Save, CheckCircle2, AlertCircle, Loader2, Eye, MessageCircle, Copy, Code2, Upload, Trash2, ExternalLink, Bot, Headset } from "lucide-react";
 
 const FONT_OPTIONS = [
   { value: "system", label: "Predefinito (sistema)", css: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif" },
@@ -228,6 +228,8 @@ export default function Impostazioni() {
 
   return (
     <div className="max-w-3xl space-y-6">
+      <ChatbotToggleSection />
+
       {/* ============ TESTI ============ */}
       <section className="bg-white border border-slate-200 rounded-lg p-6">
         <div className="flex items-center justify-between mb-1">
@@ -610,5 +612,107 @@ export default function Impostazioni() {
         )}
       </section>
     </div>
+  );
+}
+
+// =====================================================
+// Interruttore chatbot AI (assistenza.pienissimo.pro)
+// Tabella separata da widget_settings: quella è per il popup
+// incorporato nel Backoffice, questa decide cosa mostra il sito
+// assistenza stesso (chat AI oppure chat Zoho diretta con un
+// operatore). Componente a sé, load/save indipendenti dal form
+// sopra, per non intrecciare due funzionalità diverse.
+function ChatbotToggleSection() {
+  const [active, setActive] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveState, setSaveState] = useState(null); // null | "success" | "error"
+  const [errorMsg, setErrorMsg] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase
+      .from("chatbot_settings")
+      .select("is_active")
+      .eq("id", 1)
+      .single()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) setErrorMsg(`Errore nel caricamento: ${error.message}`);
+        else setActive(data?.is_active !== false);
+        setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  async function handleToggle(nextValue) {
+    setActive(nextValue); // ottimistico: il cliente vede subito il cambio
+    setSaving(true);
+    setErrorMsg(null);
+
+    const { error } = await supabase
+      .from("chatbot_settings")
+      .update({ is_active: nextValue, updated_at: new Date().toISOString() })
+      .eq("id", 1);
+
+    setSaving(false);
+
+    if (error) {
+      setActive(!nextValue); // rollback: il salvataggio è fallito
+      setSaveState("error");
+      setErrorMsg(error.message);
+      return;
+    }
+
+    setSaveState("success");
+    setTimeout(() => setSaveState(null), 2500);
+  }
+
+  return (
+    <section className="bg-white border border-slate-200 rounded-lg p-6">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+          <Bot size={18} className="text-indigo-600" />
+          Chatbot AI — assistenza.pienissimo.pro
+        </h2>
+        {loading ? (
+          <Loader2 className="animate-spin text-slate-400" size={18} />
+        ) : (
+          <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={active}
+              disabled={saving}
+              onChange={(e) => handleToggle(e.target.checked)}
+              className="w-4 h-4 rounded accent-indigo-600"
+            />
+            Chatbot attivo
+          </label>
+        )}
+      </div>
+      <p className="text-sm text-slate-500">
+        Quando disattivato, il sito mostra subito la chat Zoho con un operatore
+        invece della chat AI — interruttore di sicurezza per emergenze o
+        manutenzione, effetto immediato sui nuovi visitatori.
+      </p>
+
+      {!loading && !active && (
+        <div className="mt-3 flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          <Headset size={14} className="flex-shrink-0" />
+          Chatbot AI spento: i visitatori vedono la chat Zoho diretta.
+        </div>
+      )}
+
+      {saveState === "success" && (
+        <div className="mt-3 flex items-center gap-2 text-xs text-emerald-700">
+          <CheckCircle2 size={14} /> Salvato.
+        </div>
+      )}
+      {saveState === "error" && (
+        <div className="mt-3 flex items-center gap-2 text-xs text-red-700">
+          <AlertCircle size={14} /> {errorMsg || "Errore nel salvataggio."}
+        </div>
+      )}
+    </section>
   );
 }
