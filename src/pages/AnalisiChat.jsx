@@ -138,13 +138,13 @@ function AIBanner({ total }) {
         </div>
         <div>
           <div className="text-xs font-medium uppercase tracking-wider text-indigo-700">
-            Analisi automatica AI (Claude Haiku 4.5)
+            Analisi automatica AI (Claude Haiku 4.5 + Sonnet 5.5 sui casi complessi)
           </div>
           <div className="text-2xl font-bold text-indigo-900 mt-1">
             {formatNumber(total)} chat categorizzate
           </div>
           <div className="text-xs text-indigo-700 mt-1">
-            Categoria, sottocategoria, sentiment e stato di risoluzione assegnati automaticamente
+            Categoria, sottocategoria, sentiment e stato di risoluzione assegnati automaticamente, con rilettura da parte del modello più capace quando la classificazione è incerta
           </div>
         </div>
       </div>
