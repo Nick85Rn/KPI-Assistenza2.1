@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabaseClient";
+import OrariChatbotSection from "../components/OrariChatbot";
 import { Save, CheckCircle2, AlertCircle, Loader2, Eye, MessageCircle, Copy, Code2, Upload, Trash2, ExternalLink, Bot, Headset } from "lucide-react";
 
 const FONT_OPTIONS = [
@@ -229,6 +230,7 @@ export default function Impostazioni() {
   return (
     <div className="max-w-3xl space-y-6">
       <ChatbotToggleSection />
+      <OrariChatbotSection />
 
       {/* ============ TESTI ============ */}
       <section className="bg-white border border-slate-200 rounded-lg p-6">
