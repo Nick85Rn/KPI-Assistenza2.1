@@ -16,6 +16,7 @@ import SegnalazioniZucchetti from "./pages/SegnalazioniZucchetti";
 import WhatsappAssistenza from "./pages/WhatsappAssistenza";
 import ChatbotFaq from "./pages/ChatbotFaq";
 import AnalisiChat from "./pages/AnalisiChat";
+import CaricoLavoro from "./pages/CaricoLavoro";
 import Report from "./pages/Report";
 import MappaLocali from "./pages/MappaLocali";
 import Impostazioni from "./pages/Impostazioni";
@@ -102,7 +103,7 @@ function AppInner({ session }) {
   const lastSync = data.lastSync && typeof data.lastSync === "object" ? data.lastSync : {};
   const hasSyncInfo = Object.keys(lastSync).length > 0;
 
-  const showOverlay = !!data.loading && !!data.current && activePage !== "report" && activePage !== "impostazioni";
+  const showOverlay = !!data.loading && !!data.current && activePage !== "report" && activePage !== "carico-lavoro" && activePage !== "impostazioni";
   const overlayLabel = sync.running
     ? "Sincronizzazione con Zoho in corso..."
     : "Aggiornamento dati...";
@@ -178,6 +179,9 @@ function PageContent({ activePage, data, period, periodType }) {
   }
   if (activePage === "mappa-locali") {
     return <MappaLocali />;
+  }
+  if (activePage === "carico-lavoro") {
+    return <CaricoLavoro period={period} />;
   }
   if (activePage === "chatbot-faq") {
     return <ChatbotFaq period={period} />;
