@@ -119,10 +119,15 @@ Deno.serve(async (req) => {
   for (const c of todo) {
     try {
       const s = await score(c.conversation_text);
+      // Chat condivisa: più saluti automatici con nomi diversi = passaggio tra colleghi.
+      const saluti = new Set(
+        [...(c.conversation_text as string).matchAll(/^Bot ([^:\n]+?): Ciao/gm)].map((m) => m[1].trim()),
+      );
       const { error: upErr } = await supabaseAdmin.from("chat_quality").upsert({
         chat_id: String(c.chat_id),
         created_time: c.created_time,
         ...s,
+        chat_condivisa: saluti.size > 1,
         source: "ai",
         model: MODEL,
         scored_at: new Date().toISOString(),

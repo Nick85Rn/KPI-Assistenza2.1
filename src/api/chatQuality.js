@@ -23,3 +23,17 @@ export async function getChatQuality(from, to) {
   }
   return out;
 }
+
+/** true se l'utente loggato può vedere la vista per collaboratore. */
+export async function canViewOperatorQuality() {
+  const { data, error } = await supabase.rpc("quality_viewer_ok");
+  if (error) return false; // funzione non ancora creata: vista nascosta
+  return data === true;
+}
+
+/** Valutazioni con operatore (solo per utenti in quality_viewers). */
+export async function getChatQualityByOperator(from, to) {
+  const { data, error } = await supabase.rpc("get_chat_quality_by_operator", { p_from: from, p_to: to });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}

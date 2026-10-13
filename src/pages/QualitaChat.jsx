@@ -16,7 +16,7 @@ import {
 import KPICard from "../components/KPICard";
 import Loading from "../components/Loading";
 import SectionTitle from "../components/SectionTitle";
-import { getChatQuality } from "../api/chatQuality";
+import { getChatQuality, canViewOperatorQuality, getChatQualityByOperator } from "../api/chatQuality";
 import { formatNumber, formatDateTime } from "../lib/format";
 
 const MIN_CHATS = 10; // sotto questa soglia mostriamo i dati con un avviso
@@ -55,6 +55,34 @@ function weekStart(iso) {
 const chatScore = (r) => ((r.tono + r.comprensione + r.correttezza + r.chiusura) / 8) * 100;
 
 export default function QualitaChat({ period }) {
+  const [tab, setTab] = useState("team");
+  const [canOperators, setCanOperators] = useState(false);
+
+  useEffect(() => {
+    canViewOperatorQuality().then(setCanOperators);
+  }, []);
+
+  return (
+    <div className="space-y-6">
+      {canOperators && (
+        <div className="flex gap-2 border-b border-slate-200">
+          {[["team", "Team"], ["operatori", "Per collaboratore"]].map(([k, l]) => (
+            <button
+              key={k}
+              onClick={() => setTab(k)}
+              className={`px-4 py-2 text-sm -mb-px border-b-2 ${tab === k ? "border-indigo-600 text-indigo-700 font-semibold" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+            >
+              {l}
+            </button>
+          ))}
+        </div>
+      )}
+      {tab === "operatori" && canOperators ? <OperatorView period={period} /> : <TeamView period={period} />}
+    </div>
+  );
+}
+
+function TeamView({ period }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
   const [onlyReview, setOnlyReview] = useState(true);
@@ -321,5 +349,154 @@ function StackedBar({ parts, total }) {
         </div>
       ))}
     </div>
+  );
+}
+
+// ============================================================
+// Vista per collaboratore (solo per chi è in quality_viewers)
+// ============================================================
+
+const MIN_OP = 20; // sotto questa soglia il dato è solo indicativo
+
+function OperatorView({ period }) {
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState(null);
+  const [open, setOpen] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    setRows(null);
+    setError(null);
+    getChatQualityByOperator(period.from, period.to)
+      .then((r) => alive && setRows(r))
+      .catch((e) => alive && setError(e.message));
+    return () => { alive = false; };
+  }, [period.from, period.to]);
+
+  const ops = useMemo(() => {
+    if (!rows) return [];
+    const by = new Map();
+    let shared = 0;
+    rows.forEach((r) => {
+      if (r.chat_condivisa) { shared++; return; }
+      if (!by.has(r.operator)) by.set(r.operator, []);
+      by.get(r.operator).push(r);
+    });
+    const list = Array.from(by.entries()).map(([name, rs]) => {
+      const n = rs.length;
+      const avg = (k) => (rs.reduce((s, r) => s + r[k], 0) / n / 2) * 100;
+      return {
+        name, n, rs,
+        qualita: rs.reduce((s, r) => s + chatScore(r), 0) / n,
+        tono: avg("tono"), comprensione: avg("comprensione"), correttezza: avg("correttezza"), chiusura: avg("chiusura"),
+        risolte: pct(rs.filter((r) => r.esito === "risolta").length, n),
+        alta: pct(rs.filter((r) => r.soddisfazione === "alta").length, n),
+        critiche: rs.filter((r) => Math.min(r.tono, r.comprensione, r.correttezza, r.chiusura) === 0).length,
+      };
+    }).sort((a, b) => b.n - a.n);
+    return { list, shared };
+  }, [rows]);
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+        <AlertCircle className="mx-auto mb-2 text-red-500" size={32} />
+        <div className="text-red-900 font-semibold">Errore: {error}</div>
+      </div>
+    );
+  }
+  if (rows === null) return <Loading size="lg" label="Caricamento valutazioni..." />;
+  if (!ops.list || ops.list.length === 0) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-lg p-12 text-center text-slate-500">
+        Nessuna chat valutata con operatore nel periodo.
+      </div>
+    );
+  }
+
+  const cell = (v, low) => <td className={`px-3 py-2 text-right tabular-nums ${low ? "text-slate-400" : ""}`}>{Math.round(v)}</td>;
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-900 flex gap-3">
+        <Info size={18} className="flex-shrink-0 mt-0.5" />
+        <div>
+          Vista riservata. I punteggi sono una lettura automatica delle conversazioni: servono per scegliere cosa rivedere
+          insieme a ciascuno, non come classifica. Con meno di {MIN_OP} chat il dato è solo indicativo (numeri in grigio).
+          Le {ops.shared} chat passate tra più colleghi non sono contate.
+        </div>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+            <tr>
+              <th className="text-left px-3 py-2">Collaboratore</th>
+              <th className="text-right px-3 py-2">Chat</th>
+              <th className="text-right px-3 py-2">Qualità</th>
+              <th className="text-right px-3 py-2">Tono</th>
+              <th className="text-right px-3 py-2">Comprensione</th>
+              <th className="text-right px-3 py-2">Correttezza</th>
+              <th className="text-right px-3 py-2">Chiusura</th>
+              <th className="text-right px-3 py-2">Risolte %</th>
+              <th className="text-right px-3 py-2">Soddisf. alta %</th>
+              <th className="text-right px-3 py-2">Con punti critici</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {ops.list.map((o) => {
+              const low = o.n < MIN_OP;
+              const isOpen = open === o.name;
+              return (
+                <OperatorRows key={o.name} o={o} low={low} isOpen={isOpen} onToggle={() => setOpen(isOpen ? null : o.name)} cell={cell} />
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="text-xs text-slate-400">Punteggi da 0 a 100 (100 = tutte le chat buone). Clic su una riga per vedere le chat da rivedere.</div>
+    </div>
+  );
+}
+
+function OperatorRows({ o, low, isOpen, onToggle, cell }) {
+  const review = o.rs
+    .filter((r) => Math.min(r.tono, r.comprensione, r.correttezza, r.chiusura) < 2 || r.esito !== "risolta")
+    .map((r) => ({ ...r, score: chatScore(r) }))
+    .sort((a, b) => a.score - b.score);
+  return (
+    <>
+      <tr onClick={onToggle} className="cursor-pointer hover:bg-slate-50">
+        <td className="px-3 py-2 font-medium text-slate-800">{o.name}{low && <span className="ml-2 text-[10px] uppercase text-amber-600">pochi dati</span>}</td>
+        <td className="px-3 py-2 text-right tabular-nums">{o.n}</td>
+        {cell(o.qualita, low)}{cell(o.tono, low)}{cell(o.comprensione, low)}{cell(o.correttezza, low)}{cell(o.chiusura, low)}
+        {cell(o.risolte, low)}{cell(o.alta, low)}
+        <td className={`px-3 py-2 text-right tabular-nums ${low ? "text-slate-400" : ""}`}>{o.critiche}</td>
+      </tr>
+      {isOpen && (
+        <tr>
+          <td colSpan={10} className="bg-slate-50 px-4 py-3">
+            {review.length === 0 ? (
+              <div className="text-sm text-slate-500">Nessuna chat con criticità nel periodo.</div>
+            ) : (
+              <ul className="space-y-2">
+                {review.slice(0, 8).map((r) => (
+                  <li key={r.chat_id} className="text-sm">
+                    <span className="inline-flex gap-1 mr-2 align-middle">
+                      {[r.tono, r.comprensione, r.correttezza, r.chiusura].map((v, i) => (
+                        <i key={i} title={DIMENSIONS[i].label} className={`inline-block w-3 h-3 rounded-sm ${v === 2 ? "bg-green-500" : v === 1 ? "bg-amber-400" : "bg-red-500"}`} />
+                      ))}
+                    </span>
+                    <span className="font-mono text-xs text-slate-500 mr-2">{r.chat_id}</span>
+                    <span className="text-slate-700">{r.nota}</span>
+                    {r.azione && <span className="text-slate-500"> — {r.azione}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
