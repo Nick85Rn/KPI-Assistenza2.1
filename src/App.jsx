@@ -17,6 +17,7 @@ import WhatsappAssistenza from "./pages/WhatsappAssistenza";
 import ChatbotFaq from "./pages/ChatbotFaq";
 import AnalisiChat from "./pages/AnalisiChat";
 import CaricoLavoro from "./pages/CaricoLavoro";
+import QualitaChat from "./pages/QualitaChat";
 import Report from "./pages/Report";
 import MappaLocali from "./pages/MappaLocali";
 import Impostazioni from "./pages/Impostazioni";
@@ -182,6 +183,9 @@ function PageContent({ activePage, data, period, periodType }) {
   }
   if (activePage === "carico-lavoro") {
     return <CaricoLavoro period={period} />;
+  }
+  if (activePage === "qualita-chat") {
+    return <QualitaChat period={period} />;
   }
   if (activePage === "chatbot-faq") {
     return <ChatbotFaq period={period} />;

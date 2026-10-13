@@ -16,6 +16,7 @@ import {
   Settings,
   LogOut,
   Gauge,
+  ClipboardCheck,
 } from "lucide-react";
 
 export const NAV_ITEMS = [
@@ -30,6 +31,7 @@ export const NAV_ITEMS = [
   { key: "chatbot-faq", label: "Chatbot AI", icon: Bot, live: true },
   { key: "carico-lavoro", label: "Carico di lavoro", icon: Gauge, live: true },
   { key: "analisi-chat", label: "Analisi Chat",  icon: Bot,           live: true, badge: "AI" },
+  { key: "qualita-chat", label: "Qualità chat",  icon: ClipboardCheck, live: true, badge: "AI" },
   { key: "mappa-locali", label: "Mappa Locali",  icon: Map,           live: true  },
   { key: "report",       label: "Report",        icon: FileText,      live: true  },
   { key: "impostazioni", label: "Impostazioni",  icon: Settings,      live: true  },
