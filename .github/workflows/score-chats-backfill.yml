@@ -43,5 +43,6 @@ jobs:
             if [ -z "$n" ]; then echo "risposta inattesa, mi fermo"; exit 1; fi
             total=$((total + n))
             if [ "${picked:-0}" -eq 0 ]; then echo "Nulla da valutare: finito."; break; fi
+            if [ "$n" -eq 0 ]; then echo "Nessuna chat valutata (vedi errors sopra): mi fermo."; exit 1; fi
           done
           echo "Chat valutate in questa esecuzione: $total"
