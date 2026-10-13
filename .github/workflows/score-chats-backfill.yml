@@ -1,0 +1,47 @@
+# .github/workflows/score-chats-backfill.yml
+#
+# Valuta con Claude le chat storiche per la scheda "Qualità chat".
+# Lancio manuale: Actions → Score chats backfill → Run workflow.
+# Richiama la funzione score-chats a blocchi finché non resta nulla da valutare
+# (le chat già valutate vengono saltate: si può rilanciare senza duplicati).
+
+name: Score chats backfill
+
+on:
+  workflow_dispatch:
+    inputs:
+      from:
+        description: "Data di partenza (YYYY-MM-DD)"
+        default: "2026-08-01"
+      batch:
+        description: "Chat per chiamata (max 40)"
+        default: "20"
+      max_calls:
+        description: "Numero massimo di chiamate"
+        default: "150"
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - name: Valuta le chat a blocchi
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          FROM: ${{ inputs.from }}
+          BATCH: ${{ inputs.batch }}
+          MAX_CALLS: ${{ inputs.max_calls }}
+        run: |
+          total=0
+          for i in $(seq 1 "$MAX_CALLS"); do
+            out=$(curl -sS --max-time 400 "$SUPABASE_URL/functions/v1/score-chats?from=$FROM&limit=$BATCH" \
+              -H "Authorization: Bearer $SUPABASE_ANON_KEY" -H "apikey: $SUPABASE_ANON_KEY") || { echo "chiamata $i fallita"; sleep 10; continue; }
+            echo "[$i] $out"
+            n=$(echo "$out" | grep -o '"scored":[0-9]*' | head -1 | cut -d: -f2)
+            picked=$(echo "$out" | grep -o '"picked":[0-9]*' | head -1 | cut -d: -f2)
+            if [ -z "$n" ]; then echo "risposta inattesa, mi fermo"; exit 1; fi
+            total=$((total + n))
+            if [ "${picked:-0}" -eq 0 ]; then echo "Nulla da valutare: finito."; break; fi
+          done
+          echo "Chat valutate in questa esecuzione: $total"
