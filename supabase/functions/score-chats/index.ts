@@ -53,7 +53,7 @@ function shorten(t: string): string {
 
 const clamp = (v: unknown) => Math.max(0, Math.min(2, Math.round(Number(v))));
 
-async function score(text: string) {
+async function scoreOnce(text: string) {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -63,16 +63,18 @@ async function score(text: string) {
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 500,
+      max_tokens: 700,
       system: SYSTEM,
-      messages: [{ role: "user", content: shorten(text) }],
+      messages: [
+        { role: "user", content: shorten(text) },
+      ],
     }),
   });
   if (!res.ok) throw new Error(`Anthropic ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const body = await res.json();
-  const raw = body.content?.[0]?.text ?? "";
+  const raw = body.content?.find((b: { type: string }) => b.type === "text")?.text ?? "";
   const m = raw.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error("risposta senza JSON");
+  if (!m) throw new Error("risposta senza JSON: " + raw.slice(0, 80));
   const j = JSON.parse(m[0]);
   if (!ESITI.includes(j.esito) || !SODD.includes(j.soddisfazione)) throw new Error("valori non validi");
   return {
@@ -85,6 +87,14 @@ async function score(text: string) {
     nota: String(j.nota ?? "").slice(0, 300),
     azione: String(j.azione ?? "").slice(0, 200),
   };
+}
+
+async function score(text: string) {
+  try {
+    return await scoreOnce(text);
+  } catch (_e) {
+    return await scoreOnce(text); // un secondo tentativo
+  }
 }
 
 Deno.serve(async (req) => {
