@@ -8,6 +8,8 @@
 // Uso: GET/POST .../functions/v1/score-chats?limit=20&days=14
 //   limit = quante chat valutare per chiamata (default 20, max 40)
 //   days  = quanto indietro guardare (default 14)
+//   from  = in alternativa a days, data di partenza "YYYY-MM-DD" (recupero storico)
+// Le chat già valutate vengono saltate: si può richiamare finché scored = 0.
 
 import { corsHeaders, handleCors } from "../_shared/cors.ts";
 import { supabaseAdmin } from "../_shared/supabase-admin.ts";
@@ -91,37 +93,61 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   const limit = Math.min(Number(url.searchParams.get("limit") ?? 20), 40);
   const days = Number(url.searchParams.get("days") ?? 14);
-  const since = new Date(Date.now() - days * 86400000).toISOString();
+  const from = url.searchParams.get("from");
+  const since = from && /^\d{4}-\d{2}-\d{2}$/.test(from)
+    ? `${from}T00:00:00Z`
+    : new Date(Date.now() - days * 86400000).toISOString();
 
-  // Chat recenti con una conversazione vera (almeno ~900 caratteri), già valutate escluse.
-  const { data: chats, error } = await supabaseAdmin
-    .from("chat_faq")
-    .select("chat_id, created_time, conversation_text")
-    .gte("created_time", since)
-    .not("conversation_text", "is", null)
-    .order("created_time", { ascending: false })
-    .limit(500);
-  if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500, headers: { ...corsHeaders, "content-type": "application/json" },
-    });
+  // 1) Elenco leggero (solo id e data) delle chat nel periodo, a pagine.
+  const candidates: { chat_id: unknown; created_time: string }[] = [];
+  for (let start = 0; start < 10000; start += 1000) {
+    const { data, error } = await supabaseAdmin
+      .from("chat_faq")
+      .select("chat_id, created_time")
+      .gte("created_time", since)
+      .order("created_time", { ascending: false })
+      .range(start, start + 999);
+    if (error) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500, headers: { ...corsHeaders, "content-type": "application/json" },
+      });
+    }
+    candidates.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
   }
 
-  const ids = (chats ?? []).map((c) => String(c.chat_id));
-  const { data: done } = await supabaseAdmin.from("chat_quality").select("chat_id").in("chat_id", ids);
-  const doneSet = new Set((done ?? []).map((d) => d.chat_id));
-  const todo = (chats ?? [])
-    .filter((c) => !doneSet.has(String(c.chat_id)) && (c.conversation_text ?? "").length > 900)
-    .slice(0, limit);
+  // 2) Tolgo quelle già valutate.
+  const done: { chat_id: string }[] = [];
+  for (let start = 0; start < 20000; start += 1000) {
+    const { data } = await supabaseAdmin
+      .from("chat_quality").select("chat_id").gte("created_time", since).range(start, start + 999);
+    done.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
+  const doneSet = new Set(done.map((d) => d.chat_id));
+  const pending = candidates.filter((c) => !doneSet.has(String(c.chat_id)));
+
+  // 3) Scarico il testo a blocchi finché trovo abbastanza chat con conversazione vera
+  //    (almeno ~900 caratteri: le altre sono saluti o chat perse e vengono saltate).
+  const todo: { chat_id: unknown; created_time: string; conversation_text: string }[] = [];
+  for (let i = 0; i < pending.length && todo.length < limit; i += 50) {
+    const ids = pending.slice(i, i + 50).map((c) => String(c.chat_id));
+    const { data } = await supabaseAdmin
+      .from("chat_faq").select("chat_id, created_time, conversation_text").in("chat_id", ids);
+    for (const c of data ?? []) {
+      if ((c.conversation_text ?? "").length > 900 && todo.length < limit) todo.push(c);
+    }
+  }
 
   let ok = 0;
   const errors: string[] = [];
-  for (const c of todo) {
+
+  async function handle(c: { chat_id: unknown; created_time: string; conversation_text: string }) {
     try {
       const s = await score(c.conversation_text);
       // Chat condivisa: più saluti automatici con nomi diversi = passaggio tra colleghi.
       const saluti = new Set(
-        [...(c.conversation_text as string).matchAll(/^Bot ([^:\n]+?): Ciao/gm)].map((m) => m[1].trim()),
+        [...c.conversation_text.matchAll(/^Bot ([^:\n]+?): Ciao/gm)].map((m) => m[1].trim()),
       );
       const { error: upErr } = await supabaseAdmin.from("chat_quality").upsert({
         chat_id: String(c.chat_id),
@@ -139,8 +165,14 @@ Deno.serve(async (req) => {
     }
   }
 
+  // 5 valutazioni in parallelo per restare nei tempi della funzione.
+  const CONCURRENCY = 5;
+  for (let i = 0; i < todo.length; i += CONCURRENCY) {
+    await Promise.all(todo.slice(i, i + CONCURRENCY).map(handle));
+  }
+
   return new Response(
-    JSON.stringify({ scored: ok, candidates: todo.length, errors: errors.slice(0, 5) }),
+    JSON.stringify({ scored: ok, picked: todo.length, errors: errors.slice(0, 5) }),
     { headers: { ...corsHeaders, "content-type": "application/json" } },
   );
 });
