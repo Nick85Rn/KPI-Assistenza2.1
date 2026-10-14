@@ -7,6 +7,7 @@
 // componente: passa titolo, sottotitolo e i KPI già aggregati. Così
 // aggiungere un dipartimento non comporta duplicare la vista.
 
+import { useState } from "react";
 import {
   Mail,
   Inbox,
@@ -49,7 +50,14 @@ export default function DepartmentTickets({
   const safeData = data || {};
   const loading = safeData.loading;
   const error = safeData.error;
-  const kpis = safeData.kpis || null;
+  const rawKpis = safeData.kpis || null;
+
+  // Mail automatiche: se il reparto le espone, di default le escludiamo dai
+  // numeri (l'interruttore le fa tornare). Gli altri reparti non cambiano.
+  const [excludeAuto, setExcludeAuto] = useState(true);
+  const automatic = rawKpis?.automatic || null;
+  const hasAuto = !!automatic && automatic.total > 0;
+  const kpis = hasAuto && excludeAuto ? withoutAutomatic(rawKpis) : rawKpis;
 
   if (loading && !kpis) {
     return <Loading size="lg" label={loadingLabel} />;
@@ -85,6 +93,13 @@ export default function DepartmentTickets({
     <div className="space-y-8">
       <section>
         <SectionTitle title={title} hint={subtitle} />
+        {hasAuto && (
+          <AutoMailToggle
+            checked={excludeAuto}
+            onChange={setExcludeAuto}
+            count={automatic.total}
+          />
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <KPICard
             label="Ticket totali"
@@ -167,6 +182,47 @@ export default function DepartmentTickets({
         </section>
       )}
     </div>
+  );
+}
+
+// Toglie le mail automatiche dai KPI aggregati (arrivano già sommati).
+function withoutAutomatic(k) {
+  const a = k.automatic;
+  const byStatus = k.byStatus
+    .map((s) => ({ ...s, tickets: Math.max(0, s.tickets - (a.byStatus[s.status] || 0)) }))
+    .filter((s) => s.tickets > 0);
+  const byDay = k.byDay.map((d) => ({
+    ...d,
+    tickets: Math.max(0, d.tickets - (a.byDay[d.date] || 0)),
+  }));
+  return {
+    ...k,
+    tickets_total: Math.max(0, k.tickets_total - a.total),
+    tickets_closed: Math.max(0, k.tickets_closed - a.closed),
+    avg_resolution_sec: a.avgResolutionReal ?? k.avg_resolution_sec,
+    byStatus,
+    byDay,
+    byResponder: k.byResponderManual ?? k.byResponder,
+  };
+}
+
+function AutoMailToggle({ checked, onChange, count }) {
+  return (
+    <label className="flex items-start gap-2 mb-4 text-sm text-slate-700 cursor-pointer select-none">
+      <input
+        type="checkbox"
+        className="mt-0.5 h-4 w-4 rounded border-slate-300"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span>
+        Escludi le mail automatiche{" "}
+        <span className="text-slate-500">
+          ({formatNumber(count)} nel periodo: notifiche di sistema, feedback chat,
+          attivazioni generate dalla piattaforma)
+        </span>
+      </span>
+    </label>
   );
 }
 

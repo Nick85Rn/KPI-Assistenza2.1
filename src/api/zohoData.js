@@ -1157,25 +1157,87 @@ function emptyDeptTicketKpis() {
 
 export async function getMailAssistenzaKpis(period) {
   const kpis = await getDeptTicketKpis("zoho_daily_mail_assistenza", period);
-  const byResponder = await getDeptResponders("mail_assistenza", period);
-  return { ...kpis, byResponder };
+  const [byResponder, byResponderManual, automatic] = await Promise.all([
+    getDeptResponders("mail_assistenza", period),
+    getDeptResponders("mail_assistenza", period, true),
+    getMailAutomaticStats(period),
+  ]);
+  return { ...kpis, byResponder, byResponderManual, automatic };
 }
 
 // Chi risponde e chi chiude i ticket di un reparto (RPC get_dept_responders).
 // "Chi chiude" è una stima: Zoho non indica chi ha premuto "chiudi", quindi
 // si attribuisce la chiusura a chi ha scritto l'ultima risposta prima di essa.
-export async function getDeptResponders(dept, period) {
+// excludeAuto = true toglie le mail automatiche (solo reparto mail_assistenza).
+export async function getDeptResponders(dept, period, excludeAuto = false) {
   const { from, to } = asDateRange(period);
   const { data, error } = await supabase.rpc("get_dept_responders", {
     p_dept: dept,
     p_from: from,
     p_to: to,
+    p_exclude_auto: excludeAuto,
   });
   if (error) {
     console.error(`getDeptResponders(${dept}):`, error.message);
     return [];
   }
   return data ?? [];
+}
+
+// Mail automatiche (notifiche di sistema, feedback SalesIQ, attivazioni dalla
+// piattaforma...) tra i ticket CREATI nel periodo. Il flag is_automatic è
+// calcolato dal database (funzione refresh_mail_automatic, regole nella
+// tabella mail_auto_rules). Serve per "togliere" le automatiche dai KPI
+// aggregati, che invece arrivano già sommati dalla tabella giornaliera.
+// Restituisce null se i dati non sono disponibili: la pagina allora non
+// mostra l'interruttore.
+export async function getMailAutomaticStats(period) {
+  const { from, to } = asDateRange(period);
+
+  const { data, error } = await fetchAllPaginated((pageFrom, pageTo) =>
+    supabase
+      .from("zoho_raw_mail_assistenza")
+      .select("status, created_time, closed_time, is_automatic")
+      .gte("created_time", `${from}T00:00:00`)
+      .lte("created_time", `${to}T23:59:59`)
+      .range(pageFrom, pageTo)
+  );
+
+  if (error) {
+    console.error("getMailAutomaticStats:", error.message);
+    return null;
+  }
+
+  const rows = data ?? [];
+  let total = 0;
+  let closed = 0;
+  let resSum = 0;
+  let resN = 0;
+  const byStatus = {};
+  const byDay = {};
+
+  for (const t of rows) {
+    const isClosed = !isDeptOpenStatus(t.status);
+    if (t.is_automatic) {
+      total++;
+      if (isClosed) closed++;
+      const st = t.status || "(nessuno)";
+      byStatus[st] = (byStatus[st] || 0) + 1;
+      const day = String(t.created_time || "").slice(0, 10);
+      if (day) byDay[day] = (byDay[day] || 0) + 1;
+    } else if (isClosed && t.closed_time && t.created_time) {
+      const sec = (new Date(t.closed_time) - new Date(t.created_time)) / 1000;
+      if (sec >= 0) { resSum += sec; resN++; }
+    }
+  }
+
+  return {
+    total,
+    closed,
+    byStatus,
+    byDay,
+    avgResolutionReal: resN > 0 ? resSum / resN : null,
+  };
 }
 
 export function getSegnalazioniZucchettiKpis(period) {
