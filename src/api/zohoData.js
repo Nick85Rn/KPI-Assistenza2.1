@@ -1163,8 +1163,53 @@ export function getSegnalazioniZucchettiKpis(period) {
   return getDeptTicketKpis("zoho_daily_segnalazioni_zucchetti", period);
 }
 
-export function getWhatsappAssistenzaKpis(period) {
-  return getDeptTicketKpis("zoho_daily_whatsapp_assistenza", period);
+export async function getWhatsappAssistenzaKpis(period) {
+  const kpis = await getDeptTicketKpis("zoho_daily_whatsapp_assistenza", period);
+  const byAssignee = await getTicketsByAssignee("zoho_raw_whatsapp_assistenza", period);
+  return { ...kpis, byAssignee };
+}
+
+// Ticket per assegnatario (dalla tabella raw): chi li ha in carico / chiusi.
+// Nota: Zoho espone l'assegnatario attuale del ticket, non chi ha premuto
+// "chiudi". Per un ticket chiuso è comunque la persona che lo ha gestito.
+// I ticket sono quelli CREATI nel periodo (coerente con gli altri KPI).
+export async function getTicketsByAssignee(tableName, period) {
+  const { from, to } = asDateRange(period);
+
+  const { data, error } = await fetchAllPaginated((pageFrom, pageTo) =>
+    supabase
+      .from(tableName)
+      .select("ticket_id, status, assignee, created_time, closed_time")
+      .gte("created_time", `${from}T00:00:00`)
+      .lte("created_time", `${to}T23:59:59`)
+      .range(pageFrom, pageTo)
+  );
+
+  if (error) {
+    console.error(`getTicketsByAssignee(${tableName}):`, error.message);
+    return [];
+  }
+
+  const map = new Map();
+  for (const t of data ?? []) {
+    const name = t.assignee || "Non assegnato";
+    const r = map.get(name) ?? { assignee: name, total: 0, open: 0, closed: 0, resSum: 0, resN: 0 };
+    r.total++;
+    if (isDeptOpenStatus(t.status)) {
+      r.open++;
+    } else {
+      r.closed++;
+      if (t.closed_time && t.created_time) {
+        const sec = (new Date(t.closed_time) - new Date(t.created_time)) / 1000;
+        if (sec >= 0) { r.resSum += sec; r.resN++; }
+      }
+    }
+    map.set(name, r);
+  }
+
+  return Array.from(map.values())
+    .map(({ resSum, resN, ...r }) => ({ ...r, avg_resolution_sec: resN > 0 ? resSum / resN : null }))
+    .sort((a, b) => b.closed - a.closed || b.total - a.total);
 }
 
 // ============================================================

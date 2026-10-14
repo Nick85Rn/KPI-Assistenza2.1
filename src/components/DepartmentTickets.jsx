@@ -137,6 +137,16 @@ export default function DepartmentTickets({
         <StatusBreakdown items={kpis.byStatus} total={kpis.tickets_total} />
       </section>
 
+      {kpis.byAssignee && kpis.byAssignee.length > 0 && (
+        <section>
+          <SectionTitle
+            title="Chi chiude i ticket"
+            hint="Ticket del periodo per persona che li ha in carico (assegnatario in Zoho Desk)"
+          />
+          <AssigneeTable rows={kpis.byAssignee} />
+        </section>
+      )}
+
       {kpis.byDay.length > 0 && (
         <section>
           <SectionTitle
@@ -198,6 +208,59 @@ function StatusBreakdown({ items, total }) {
               </tr>
             );
           })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function AssigneeTable({ rows }) {
+  const maxClosed = Math.max(...rows.map((r) => r.closed), 1);
+  const totClosed = rows.reduce((a, r) => a + r.closed, 0);
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+          <tr>
+            <th className="text-left px-4 py-3 font-semibold">Persona</th>
+            <th className="px-4 py-3 font-semibold w-1/4">Chiusi</th>
+            <th className="text-right px-4 py-3 font-semibold">Chiusi</th>
+            <th className="text-right px-4 py-3 font-semibold">% sui chiusi</th>
+            <th className="text-right px-4 py-3 font-semibold">Ancora aperti</th>
+            <th className="text-right px-4 py-3 font-semibold">Tempo medio risoluzione</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {rows.map((r) => (
+            <tr key={r.assignee} className="hover:bg-slate-50">
+              <td className="px-4 py-3 font-medium text-slate-900">{r.assignee}</td>
+              <td className="px-4 py-3">
+                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full"
+                    style={{ width: `${(r.closed / maxClosed) * 100}%` }}
+                  />
+                </div>
+              </td>
+              <td className="px-4 py-3 text-right tabular-nums font-semibold">
+                {formatNumber(r.closed)}
+              </td>
+              <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                {totClosed > 0 ? ((r.closed / totClosed) * 100).toFixed(1) : "0.0"}%
+              </td>
+              <td className="px-4 py-3 text-right tabular-nums">
+                {r.open > 0 ? (
+                  <span className="text-amber-600 font-semibold">{formatNumber(r.open)}</span>
+                ) : (
+                  <span className="text-slate-400">0</span>
+                )}
+              </td>
+              <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                {r.avg_resolution_sec != null ? formatSeconds(r.avg_resolution_sec) : "—"}
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
