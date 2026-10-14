@@ -52,55 +52,38 @@ as $fn$
 declare
   n integer;
 begin
-  update zoho_raw_mail_assistenza r
-  set is_automatic = (
-    r.threads_synced_at is not null
-    and not exists (
-      select 1 from zoho_ticket_threads o
-      where o.dept = 'mail_assistenza' and o.ticket_id = r.ticket_id
-        and o.direction = 'out')
-    and (
-      exists (
-        select 1 from mail_auto_rules m
-        where m.kind = 'subject_regex' and coalesce(r.subject, '') ~* m.pattern)
-      or exists (
-        select 1
-        from mail_auto_rules m
-        join lateral (
-          select t.author_name
-          from zoho_ticket_threads t
-          where t.dept = 'mail_assistenza' and t.ticket_id = r.ticket_id
-            and t.direction = 'in'
-          order by t.created_time
-          limit 1
-        ) f on true
-        where m.kind = 'sender' and lower(coalesce(f.author_name, '')) = lower(m.pattern))
-    )
+  with calc as (
+    select r.ticket_id,
+      (
+        r.threads_synced_at is not null
+        and not exists (
+          select 1 from zoho_ticket_threads o
+          where o.dept = 'mail_assistenza' and o.ticket_id = r.ticket_id
+            and o.direction = 'out')
+        and (
+          exists (
+            select 1 from mail_auto_rules m
+            where m.kind = 'subject_regex' and coalesce(r.subject, '') ~* m.pattern)
+          or exists (
+            select 1
+            from mail_auto_rules m
+            join lateral (
+              select t.author_name
+              from zoho_ticket_threads t
+              where t.dept = 'mail_assistenza' and t.ticket_id = r.ticket_id
+                and t.direction = 'in'
+              order by t.created_time
+              limit 1
+            ) f on true
+            where m.kind = 'sender' and lower(coalesce(f.author_name, '')) = lower(m.pattern))
+        )
+      ) as auto
+    from zoho_raw_mail_assistenza r
   )
-  where r.is_automatic is distinct from (
-    r.threads_synced_at is not null
-    and not exists (
-      select 1 from zoho_ticket_threads o
-      where o.dept = 'mail_assistenza' and o.ticket_id = r.ticket_id
-        and o.direction = 'out')
-    and (
-      exists (
-        select 1 from mail_auto_rules m
-        where m.kind = 'subject_regex' and coalesce(r.subject, '') ~* m.pattern)
-      or exists (
-        select 1
-        from mail_auto_rules m
-        join lateral (
-          select t.author_name
-          from zoho_ticket_threads t
-          where t.dept = 'mail_assistenza' and t.ticket_id = r.ticket_id
-            and t.direction = 'in'
-          order by t.created_time
-          limit 1
-        ) f on true
-        where m.kind = 'sender' and lower(coalesce(f.author_name, '')) = lower(m.pattern))
-    )
-  );
+  update zoho_raw_mail_assistenza r
+  set is_automatic = c.auto
+  from calc c
+  where c.ticket_id = r.ticket_id and r.is_automatic is distinct from c.auto;
   get diagnostics n = row_count;
   return n;
 end;
@@ -201,3 +184,6 @@ $fn$;
 
 revoke all on function public.get_dept_responders(text, date, date, boolean) from public, anon;
 grant execute on function public.get_dept_responders(text, date, date, boolean) to authenticated;
+
+-- Prima marcatura dei ticket esistenti (restituisce quanti ticket sono stati marcati)
+select public.refresh_mail_automatic();
