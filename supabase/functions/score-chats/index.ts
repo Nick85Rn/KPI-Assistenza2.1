@@ -4,7 +4,8 @@
 // punteggi in chat_quality (alimenta la scheda "Qualità chat").
 //
 // Richiede i secret: ANTHROPIC_API_KEY (obbligatorio), SCORING_MODEL (opzionale).
-// Legge da chat_faq (chat_id, created_time, conversation_text).
+// Legge le trascrizioni complete da zoho_raw_chats tramite le funzioni SQL
+// quality_pending_chats / quality_chat_texts (supabase/chat-quality-raw.sql).
 // Uso: GET/POST .../functions/v1/score-chats?limit=20&days=14
 //   limit = quante chat valutare per chiamata (default 20, max 40)
 //   days  = quanto indietro guardare (default 14)
@@ -20,7 +21,7 @@ const API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const MAX_CHARS = 14000; // trascrizioni più lunghe: inizio + fine
 
 const SYSTEM = `Sei un revisore della qualità dell'assistenza clienti di Pienissimo (software gestionale per ristoranti).
-Ricevi la trascrizione di una chat tra un cliente e il team di assistenza ("Operatore:" = team, "Bot <Nome>: Ciao buongiorno!" è solo un saluto automatico e NON identifica chi ha risposto).
+Ricevi la trascrizione di una chat tra un cliente ("Cliente:") e il team di assistenza ("Operatore:"). Il saluto automatico iniziale non è incluso; "[allegato]" indica un file inviato.
 Valuta la CONVERSAZIONE nel suo complesso, non singole persone. Non nominare mai persone nelle note.
 Nella piattaforma Pienissimo scambiarsi in chat username, password, codici di attivazione e ID di assistenza remota è la procedura normale: NON è un difetto, NON influisce su nessun punteggio e NON va citato né nella nota né nell'azione (niente consigli tipo "non scrivere password in chat").
 
@@ -64,7 +65,7 @@ async function scoreOnce(text: string) {
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 700,
+      max_tokens: 2000,
       system: SYSTEM,
       messages: [
         { role: "user", content: shorten(text) },
@@ -75,7 +76,7 @@ async function scoreOnce(text: string) {
   const body = await res.json();
   const raw = body.content?.find((b: { type: string }) => b.type === "text")?.text ?? "";
   const m = raw.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error("risposta senza JSON: " + raw.slice(0, 80));
+  if (!m) throw new Error(`risposta senza JSON (stop: ${body.stop_reason}): ` + raw.slice(0, 80));
   const j = JSON.parse(m[0]);
   if (!ESITI.includes(j.esito) || !SODD.includes(j.soddisfazione)) throw new Error("valori non validi");
   return {
@@ -116,72 +117,42 @@ Deno.serve(async (req) => {
     : new Date(Date.now() - days * 86400000).toISOString();
 
   const idsParam = url.searchParams.get("ids");
-  let todo: { chat_id: unknown; created_time: string; conversation_text: string }[] = [];
+  type Chat = { chat_id: string; created_time: string; conversation_text: string; operatori: number };
+  let todo: Chat[] = [];
 
   if (idsParam) {
     // Modalità calibrazione: rivaluta esattamente queste chat.
     const ids = idsParam.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 40);
-    const { data } = await supabaseAdmin
-      .from("chat_faq").select("chat_id, created_time, conversation_text").in("chat_id", ids);
-    todo = (data ?? []).filter((c) => (c.conversation_text ?? "").length > 0);
+    const { data, error } = await supabaseAdmin.rpc("quality_chat_texts", { p_ids: ids });
+    if (error) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500, headers: { ...corsHeaders, "content-type": "application/json" },
+      });
+    }
+    todo = ((data ?? []) as Chat[]).filter((c) => (c.conversation_text ?? "").length > 0);
   } else {
-    // 1) Elenco leggero (solo id e data) delle chat nel periodo, a pagine.
-    const candidates: { chat_id: unknown; created_time: string }[] = [];
-    for (let start = 0; start < 10000; start += 1000) {
-      const { data, error } = await supabaseAdmin
-        .from("chat_faq")
-        .select("chat_id, created_time")
-        .gte("created_time", since)
-        .order("created_time", { ascending: false })
-        .range(start, start + 999);
-      if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
-          status: 500, headers: { ...corsHeaders, "content-type": "application/json" },
-        });
-      }
-      candidates.push(...(data ?? []));
-      if (!data || data.length < 1000) break;
+    // Chat reali (cliente + operatore) non ancora valutate, dalla più recente.
+    const { data, error } = await supabaseAdmin.rpc("quality_pending_chats", { p_since: since, p_limit: limit });
+    if (error) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500, headers: { ...corsHeaders, "content-type": "application/json" },
+      });
     }
-
-    // 2) Tolgo quelle già valutate.
-    const done: { chat_id: string }[] = [];
-    for (let start = 0; start < 20000; start += 1000) {
-      const { data } = await supabaseAdmin
-        .from("chat_quality").select("chat_id").gte("created_time", since).range(start, start + 999);
-      done.push(...(data ?? []));
-      if (!data || data.length < 1000) break;
-    }
-    const doneSet = new Set(done.map((d) => d.chat_id));
-    const pending = candidates.filter((c) => !doneSet.has(String(c.chat_id)));
-
-    // 3) Scarico il testo a blocchi finché trovo abbastanza chat con conversazione vera
-    //    (almeno ~900 caratteri: le altre sono saluti o chat perse e vengono saltate).
-    for (let i = 0; i < pending.length && todo.length < limit; i += 50) {
-      const ids = pending.slice(i, i + 50).map((c) => String(c.chat_id));
-      const { data } = await supabaseAdmin
-        .from("chat_faq").select("chat_id, created_time, conversation_text").in("chat_id", ids);
-      for (const c of data ?? []) {
-        if ((c.conversation_text ?? "").length > 900 && todo.length < limit) todo.push(c);
-      }
-    }
-
+    todo = (data ?? []) as Chat[];
   }
 
   let ok = 0;
   const errors: string[] = [];
 
-  async function handle(c: { chat_id: unknown; created_time: string; conversation_text: string }) {
+  async function handle(c: Chat) {
     try {
       const s = await score(c.conversation_text);
-      // Chat condivisa: più saluti automatici con nomi diversi = passaggio tra colleghi.
-      const saluti = new Set(
-        [...c.conversation_text.matchAll(/^Bot ([^:\n]+?): Ciao/gm)].map((m) => m[1].trim()),
-      );
       const { error: upErr } = await supabaseAdmin.from("chat_quality").upsert({
         chat_id: String(c.chat_id),
         created_time: c.created_time,
         ...s,
-        chat_condivisa: saluti.size > 1,
+        // Chat condivisa: più operatori hanno davvero scritto messaggi.
+        chat_condivisa: (c.operatori ?? 0) > 1,
         source: "ai",
         model: MODEL,
         scored_at: new Date().toISOString(),
