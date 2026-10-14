@@ -3,6 +3,9 @@
 // Valuta con Claude le chat di assistenza non ancora valutate e salva i
 // punteggi in chat_quality (alimenta la scheda "Qualità chat").
 //
+// Accesso protetto: accetta solo l'header x-cron-secret (lavori programmati,
+// vedi supabase/functions-auth.sql) oppure il token di un utente autorizzato.
+//
 // Richiede i secret: ANTHROPIC_API_KEY (obbligatorio), SCORING_MODEL (opzionale).
 // Legge le trascrizioni complete da zoho_raw_chats tramite le funzioni SQL
 // quality_pending_chats / quality_chat_texts (supabase/chat-quality-raw.sql).
@@ -13,8 +16,42 @@
 //   ids   = elenco di chat_id separati da virgola: le rivaluta anche se già valutate (calibrazione)
 // Le chat già valutate vengono saltate: si può richiamare finché scored = 0.
 
-import { corsHeaders, handleCors } from "../_shared/cors.ts";
-import { supabaseAdmin } from "../_shared/supabase-admin.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+};
+function handleCors(req: Request): Response | null {
+  return req.method === "OPTIONS" ? new Response("ok", { headers: corsHeaders }) : null;
+}
+const supabaseAdmin = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  { auth: { autoRefreshToken: false, persistSession: false } },
+);
+
+// Segreto dei lavori programmati oppure utente autorizzato.
+async function isAuthorized(req: Request): Promise<boolean> {
+  try {
+    const secret = req.headers.get("x-cron-secret");
+    if (secret) {
+      const { data } = await supabaseAdmin.rpc("check_cron_secret", { p_secret: secret });
+      if (data === true) return true;
+    }
+    const m = (req.headers.get("authorization") ?? "").match(/^Bearer\s+(.+)$/i);
+    if (m) {
+      const { data } = await supabaseAdmin.auth.getUser(m[1]);
+      const email = data?.user?.email;
+      if (email) {
+        const { data: ok } = await supabaseAdmin.rpc("internal_user_allowed", { p_email: email });
+        if (ok === true) return true;
+      }
+    }
+  } catch (_) { /* in dubbio, si nega */ }
+  return false;
+}
 
 const MODEL = Deno.env.get("SCORING_MODEL") ?? "claude-sonnet-5-5";
 const API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
@@ -102,6 +139,11 @@ async function score(text: string) {
 Deno.serve(async (req) => {
   const pre = handleCors(req);
   if (pre) return pre;
+  if (!(await isAuthorized(req))) {
+    return new Response(JSON.stringify({ ok: false, error: "Non autorizzato" }), {
+      status: 401, headers: { ...corsHeaders, "content-type": "application/json" },
+    });
+  }
   if (!API_KEY) {
     return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY mancante" }), {
       status: 500, headers: { ...corsHeaders, "content-type": "application/json" },
