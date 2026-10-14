@@ -8,9 +8,21 @@
 //   5. zoho-sync-open-tickets  (backlog real-time)
 
 import { useState, useCallback } from "react";
+import { supabase } from "../supabaseClient";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+// Le Edge Function di sincronizzazione accettano solo utenti loggati e
+// autorizzati: si invia il token della sessione, non la chiave pubblica.
+async function authHeaderValue() {
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data?.session?.access_token;
+    if (token) return `Bearer ${token}`;
+  } catch (_) { /* si ricade sulla chiave pubblica */ }
+  return `Bearer ${SUPABASE_ANON_KEY}`;
+}
 
 const SYNC_SOURCES = [
   { key: "desk",          label: "Ticket",        endpoint: "zoho-sync-desk" },
@@ -52,7 +64,7 @@ export function useSyncStatus() {
           {
             method: "GET",
             headers: {
-              "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+              "Authorization": await authHeaderValue(),
               "Content-Type": "application/json",
             },
           },
