@@ -17,15 +17,15 @@
 # Sync, il lunedì.
 #
 # TRIGGER:
-#   - Automatico: ogni giorno alle 05:10 UTC (10 minuti dopo Daily
-#     Chat Sync, per non sovrapporsi)
+#   - Automatico: spostato in pg_cron (ogni giorno dalle 05:10 UTC)
 #   - Manuale: Actions → Daily KPI Sync → Run workflow
 
 name: Daily KPI Sync
 
 on:
-  schedule:
-    - cron: "10 5 * * *"
+  # La pianificazione automatica ora è nel database (pg_cron, job "kpi-sync-*-daily"),
+  # dove il segreto delle funzioni resta nel Vault. Qui resta solo il lancio manuale:
+  # richiede il secret GitHub CRON_SECRET (stesso valore di Vault > CRON_SECRET).
   workflow_dispatch:
 
 jobs:
@@ -37,41 +37,35 @@ jobs:
       - name: Sync ticket (5 dipartimenti)
         run: |
           curl -sS "${{ secrets.SUPABASE_URL }}/functions/v1/zoho-sync-desk" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
-            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}"
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}"
           echo ""
 
       - name: Sync SLA ticket
         run: |
           curl -sS "${{ secrets.SUPABASE_URL }}/functions/v1/zoho-sync-desk-sla" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
-            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}"
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}"
           echo ""
 
       - name: Sync sessioni formazione
         run: |
           curl -sS "${{ secrets.SUPABASE_URL }}/functions/v1/zoho-sync-crm" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
-            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}"
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}"
           echo ""
 
       - name: Sync contatti (email -> azienda)
         run: |
           curl -sS "${{ secrets.SUPABASE_URL }}/functions/v1/zoho-sync-contacts" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
-            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}"
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}"
           echo ""
 
       - name: Sync backlog ticket in tempo reale
         run: |
           curl -sS "${{ secrets.SUPABASE_URL }}/functions/v1/zoho-sync-open-tickets" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
-            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}"
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}"
           echo ""
 
       - name: Sync chat (base, idempotente)
         run: |
           curl -sS "${{ secrets.SUPABASE_URL }}/functions/v1/zoho-sync-salesiq" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
-            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}"
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}"
           echo ""

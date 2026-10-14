@@ -28,7 +28,7 @@ jobs:
       - name: Valuta le chat a blocchi
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
           FROM: ${{ inputs.from }}
           BATCH: ${{ inputs.batch }}
           MAX_CALLS: ${{ inputs.max_calls }}
@@ -36,7 +36,7 @@ jobs:
           total=0
           for i in $(seq 1 "$MAX_CALLS"); do
             out=$(curl -sS --max-time 400 "$SUPABASE_URL/functions/v1/score-chats?from=$FROM&limit=$BATCH" \
-              -H "Authorization: Bearer $SUPABASE_ANON_KEY" -H "apikey: $SUPABASE_ANON_KEY") || { echo "chiamata $i fallita"; sleep 10; continue; }
+              -H "x-cron-secret: $CRON_SECRET") || { echo "chiamata $i fallita"; sleep 10; continue; }
             echo "[$i] $out"
             n=$(echo "$out" | grep -o '"scored":[0-9]*' | head -1 | cut -d: -f2)
             picked=$(echo "$out" | grep -o '"picked":[0-9]*' | head -1 | cut -d: -f2)
