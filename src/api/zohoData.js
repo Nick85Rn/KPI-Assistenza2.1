@@ -1155,8 +1155,27 @@ function emptyDeptTicketKpis() {
   };
 }
 
-export function getMailAssistenzaKpis(period) {
-  return getDeptTicketKpis("zoho_daily_mail_assistenza", period);
+export async function getMailAssistenzaKpis(period) {
+  const kpis = await getDeptTicketKpis("zoho_daily_mail_assistenza", period);
+  const byResponder = await getDeptResponders("mail_assistenza", period);
+  return { ...kpis, byResponder };
+}
+
+// Chi risponde e chi chiude i ticket di un reparto (RPC get_dept_responders).
+// "Chi chiude" è una stima: Zoho non indica chi ha premuto "chiudi", quindi
+// si attribuisce la chiusura a chi ha scritto l'ultima risposta prima di essa.
+export async function getDeptResponders(dept, period) {
+  const { from, to } = asDateRange(period);
+  const { data, error } = await supabase.rpc("get_dept_responders", {
+    p_dept: dept,
+    p_from: from,
+    p_to: to,
+  });
+  if (error) {
+    console.error(`getDeptResponders(${dept}):`, error.message);
+    return [];
+  }
+  return data ?? [];
 }
 
 export function getSegnalazioniZucchettiKpis(period) {
