@@ -277,8 +277,9 @@ function ResponderTable({ rows }) {
       <div className="px-4 py-3 text-xs text-slate-500 border-t border-slate-100">
         "Chiusi" è una stima: Zoho non dice chi ha premuto "chiudi", quindi il ticket è
         attribuito a chi ha scritto l'ultima risposta prima della chiusura. "Chiuso senza
-        risposta" indica ticket chiusi senza alcuna risposta registrata in Zoho Desk
-        (ad esempio mail automatiche o risposte date fuori da Desk).
+        risposta" indica ticket con una sola mail in ingresso e nessuna risposta inviata da
+        Zoho Desk: per lo più notifiche automatiche (attivazioni, benvenuto, avvisi di
+        sistema) chiuse senza intervento, oppure risposte date fuori da Desk.
       </div>
     </div>
   );
