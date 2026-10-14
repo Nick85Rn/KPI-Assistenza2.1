@@ -137,6 +137,16 @@ export default function DepartmentTickets({
         <StatusBreakdown items={kpis.byStatus} total={kpis.tickets_total} />
       </section>
 
+      {kpis.byResponder && kpis.byResponder.length > 0 && (
+        <section>
+          <SectionTitle
+            title="Chi risponde e chi chiude"
+            hint="Risposte scritte e ticket chiusi nel periodo, per persona"
+          />
+          <ResponderTable rows={kpis.byResponder} />
+        </section>
+      )}
+
       {kpis.byAssignee && kpis.byAssignee.length > 0 && (
         <section>
           <SectionTitle
@@ -210,6 +220,66 @@ function StatusBreakdown({ items, total }) {
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// Righe che non sono persone: restano in fondo, in grigio.
+const NOTE_ROWS = ["Chiuso senza risposta", "Dati in aggiornamento"];
+
+function ResponderTable({ rows }) {
+  const people = rows.filter((r) => !NOTE_ROWS.includes(r.persona));
+  const notes = rows.filter((r) => NOTE_ROWS.includes(r.persona));
+  const maxClosed = Math.max(...people.map((r) => r.ticket_chiusi), 1);
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+          <tr>
+            <th className="text-left px-4 py-3 font-semibold">Persona</th>
+            <th className="text-right px-4 py-3 font-semibold">Risposte</th>
+            <th className="text-right px-4 py-3 font-semibold">Ticket gestiti</th>
+            <th className="px-4 py-3 font-semibold w-1/4">Chiusi (stima)</th>
+            <th className="text-right px-4 py-3 font-semibold">Ticket chiusi</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {people.map((r) => (
+            <tr key={r.persona} className="hover:bg-slate-50">
+              <td className="px-4 py-3 font-medium text-slate-900">{r.persona}</td>
+              <td className="px-4 py-3 text-right tabular-nums">{formatNumber(r.risposte)}</td>
+              <td className="px-4 py-3 text-right tabular-nums">{formatNumber(r.ticket_gestiti)}</td>
+              <td className="px-4 py-3">
+                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full"
+                    style={{ width: `${(r.ticket_chiusi / maxClosed) * 100}%` }}
+                  />
+                </div>
+              </td>
+              <td className="px-4 py-3 text-right tabular-nums font-semibold">
+                {formatNumber(r.ticket_chiusi)}
+              </td>
+            </tr>
+          ))}
+          {notes.map((r) => (
+            <tr key={r.persona} className="bg-slate-50/60 text-slate-500">
+              <td className="px-4 py-2.5 italic">{r.persona}</td>
+              <td className="px-4 py-2.5 text-right">—</td>
+              <td className="px-4 py-2.5 text-right">—</td>
+              <td className="px-4 py-2.5" />
+              <td className="px-4 py-2.5 text-right tabular-nums">{formatNumber(r.ticket_chiusi)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="px-4 py-3 text-xs text-slate-500 border-t border-slate-100">
+        "Chiusi" è una stima: Zoho non dice chi ha premuto "chiudi", quindi il ticket è
+        attribuito a chi ha scritto l'ultima risposta prima della chiusura. "Chiuso senza
+        risposta" indica ticket chiusi senza alcuna risposta registrata in Zoho Desk
+        (ad esempio mail automatiche o risposte date fuori da Desk).
+      </div>
     </div>
   );
 }
