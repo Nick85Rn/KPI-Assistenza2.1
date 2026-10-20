@@ -17,6 +17,7 @@ import {
   LogOut,
   Gauge,
   ClipboardCheck,
+  Phone,
 } from "lucide-react";
 
 export const NAV_ITEMS = [
@@ -28,6 +29,7 @@ export const NAV_ITEMS = [
   { key: "mail-assistenza", label: "Mail Assistenza", icon: Mail,     live: true  },
   { key: "segnalazioni-zucchetti", label: "Segn. Zucchetti", icon: Flag, live: true },
   { key: "whatsapp-assistenza", label: "WhatsApp Assistenza", icon: MessageCircle, live: true },
+  { key: "chiamate", label: "Chiamate", icon: Phone, live: true },
   { key: "chatbot-faq", label: "Chatbot AI", icon: Bot, live: true },
   { key: "carico-lavoro", label: "Carico di lavoro", icon: Gauge, live: true },
   { key: "analisi-chat", label: "Analisi Chat",  icon: Bot,           live: true, badge: "AI" },

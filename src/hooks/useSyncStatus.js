@@ -1,11 +1,12 @@
 // src/hooks/useSyncStatus.js
 // Gestisce lo stato della sincronizzazione completa con Zoho.
-// Chiama 5 Edge Functions in sequenza:
+// Chiama 6 Edge Functions in sequenza:
 //   1. zoho-sync-desk          (ticket Assistenza + Sviluppo)
 //   2. zoho-sync-salesiq       (chat + heatmap)
 //   3. zoho-sync-crm           (formazioni)
 //   4. zoho-sync-desk-sla      (SLA dei ticket)
 //   5. zoho-sync-open-tickets  (backlog real-time)
+//   6. zoho-sync-calls         (chiamate del centralino, ultimi 14 giorni)
 
 import { useState, useCallback } from "react";
 import { supabase } from "../supabaseClient";
@@ -30,6 +31,7 @@ const SYNC_SOURCES = [
   { key: "crm",           label: "Formazione",    endpoint: "zoho-sync-crm" },
   { key: "desk-sla",      label: "SLA ticket",    endpoint: "zoho-sync-desk-sla" },
   { key: "open-tickets",  label: "Backlog vivo",  endpoint: "zoho-sync-open-tickets" },
+  { key: "calls",         label: "Chiamate",      endpoint: "zoho-sync-calls" },
 ];
 
 export function useSyncStatus() {
