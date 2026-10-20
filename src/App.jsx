@@ -161,7 +161,9 @@ function AppInner({ session }) {
               activePage={activePage}
               data={data}
               period={{ start: ranges.start, end: ranges.end, from: toIso(ranges.start), to: toIso(ranges.end) }}
+              prevPeriod={{ start: ranges.prevStart, end: ranges.prevEnd, from: toIso(ranges.prevStart), to: toIso(ranges.prevEnd) }}
               periodType={period.type}
+              onNavigate={setActivePage}
             />
           </ErrorBoundary>
         </div>
@@ -172,7 +174,7 @@ function AppInner({ session }) {
   );
 }
 
-function PageContent({ activePage, data, period, periodType }) {
+function PageContent({ activePage, data, period, prevPeriod, periodType, onNavigate }) {
   if (activePage === "report") {
     return <Report period={period} periodType={periodType} />;
   }
@@ -198,7 +200,7 @@ function PageContent({ activePage, data, period, periodType }) {
     return <Loading size="lg" label="Caricamento dati Zoho..." />;
   }
   switch (activePage) {
-    case "cruscotto":     return <Cruscotto data={data} />;
+    case "cruscotto":     return <Cruscotto data={data} period={period} prevPeriod={prevPeriod} onNavigate={onNavigate} />;
     case "chat":          return <RepartoChat data={data} />;
     case "formazione":    return <Formazione data={data} />;
     case "assistenza":    return <Assistenza data={data} />;

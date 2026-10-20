@@ -61,6 +61,8 @@ import {
 import { formatNumber, formatDateTime, formatSeconds } from "../lib/format";
 
 // Situazione di partenza: 6 operatori, prima della nuova assunzione (ottobre 2026).
+// Le chiamate del centralino sono registrate in Zoho CRM dal 15/09/2026.
+const CALLS_FROM = "2026-09-15";
 const BASE = { from: "2026-09-07", to: "2026-10-05", label: "7 set – 5 ott 2026" };
 
 // Colori: palette categorica validata (blu, arancio, acqua, giallo) + inchiostri neutri.
@@ -69,6 +71,7 @@ const C = {
   ticket: "#eb6834",
   sviluppo: "#1baf7a",
   formazione: "#eda100",
+  chiamate: "#e87ba4",
   ink: "#0b0b0b",
   ink2: "#52514e",
   muted: "#898781",
@@ -259,7 +262,7 @@ export default function CaricoLavoro({ period }) {
               label="Tempo occupato per operatore"
               value={fmt(sum.oreOccPerOperatoreGiorno, 1)}
               suffix={`ore al giorno su ${fmt(sum.params.disp, 1)} disponibili`}
-              hint="Almeno un'attività in corso: chat, ticket, mail, WhatsApp o formazione."
+              hint="Almeno un'attività in corso: chat, ticket, mail, WhatsApp, chiamate o formazione."
             />
           </section>
 
@@ -287,12 +290,13 @@ export default function CaricoLavoro({ period }) {
             />
             <ChartCard
               table={{
-                columns: ["Operatore", "Chat", "Ticket e mail", "Sviluppo", "Formazione", "Giorni"],
+                columns: ["Operatore", "Chat", "Ticket e mail", "Sviluppo", "Chiamate", "Formazione", "Giorni"],
                 rows: sum.operatori.map((o, i) => [
                   label(o.operatore, i),
                   fmt(o.chat / o.giorni, 1),
                   fmt(o.ticket / o.giorni, 1),
                   fmt(o.sviluppo / o.giorni, 1),
+                  fmt(o.chiamate / o.giorni, 1),
                   fmt(o.formazione / o.giorni, 1),
                   o.giorni,
                 ]),
@@ -301,6 +305,11 @@ export default function CaricoLavoro({ period }) {
               <ChannelsChart operatori={sum.operatori} label={label} />
             </ChartCard>
             <VolumeStrip c={sum.conteggi} />
+            {range.from < CALLS_FROM && (
+              <p className="text-xs text-slate-500 mt-3 px-1">
+                Le chiamate sono registrate dal {longDate(CALLS_FROM)}: nel periodo prima di questa data non sono incluse, quindi il tempo occupato è leggermente sottostimato.
+              </p>
+            )}
           </section>
 
           {/* Quando */}
@@ -546,6 +555,7 @@ function ChannelsChart({ operatori, label }) {
     chat: +(o.chat / o.giorni).toFixed(2),
     ticket: +(o.ticket / o.giorni).toFixed(2),
     sviluppo: +(o.sviluppo / o.giorni).toFixed(2),
+    chiamate: +(o.chiamate / o.giorni).toFixed(2),
     formazione: +(o.formazione / o.giorni).toFixed(2),
   }));
   const height = Math.max(220, data.length * 46 + 70);
@@ -561,6 +571,7 @@ function ChannelsChart({ operatori, label }) {
           <Bar dataKey="chat" name="Chat (lavoro attivo)" stackId="a" fill={C.chat} stroke="#fff" strokeWidth={2} />
           <Bar dataKey="ticket" name="Ticket, mail e WhatsApp" stackId="a" fill={C.ticket} stroke="#fff" strokeWidth={2} />
           <Bar dataKey="sviluppo" name="Sviluppo" stackId="a" fill={C.sviluppo} stroke="#fff" strokeWidth={2} />
+          <Bar dataKey="chiamate" name="Chiamate" stackId="a" fill={C.chiamate} stroke="#fff" strokeWidth={2} />
           <Bar dataKey="formazione" name="Formazione" stackId="a" fill={C.formazione} stroke="#fff" strokeWidth={2} radius={[0, 4, 4, 0]} />
         </BarChart>
       </ResponsiveContainer>
@@ -602,6 +613,7 @@ function VolumeStrip({ c }) {
     ["Risposte Zucchetti", c.zucchetti],
     ["Aperture verso sviluppo", c.aperture],
     ["Aggiornamenti su ticket sviluppo", c.sviluppo],
+    ["Chiamate con risposta", c.chiamate],
     ["Sessioni di formazione", c.formazione],
   ];
   return (
@@ -762,11 +774,12 @@ function MethodSection({ settings, S, params }) {
   const capSess = fmt((S.chat_cap_sessione_sec ?? 5400) / 60, 0);
 
   const defs = [
-    ["Occupazione", `Tempo occupato ÷ tempo disponibile. Il tempo occupato è il tempo in cui l'operatore ha almeno un'attività in corso (una chat aperta, una risposta a ticket, mail o WhatsApp, una sessione di formazione). Le attività che si sovrappongono si contano una sola volta, quindi l'occupazione non supera mai il 100%. Il tempo disponibile è ${fmt(disp, 1)} ore per ogni giorno in cui l'operatore ha registrato attività.`],
+    ["Occupazione", `Tempo occupato ÷ tempo disponibile. Il tempo occupato è il tempo in cui l'operatore ha almeno un'attività in corso (una chat aperta, una risposta a ticket, mail o WhatsApp, una chiamata con risposta, una sessione di formazione). Le attività che si sovrappongono si contano una sola volta, quindi l'occupazione non supera mai il 100%. Il tempo disponibile è ${fmt(disp, 1)} ore per ogni giorno in cui l'operatore ha registrato attività.`],
     ["Fascia sostenibile", `Tra il ${tMin}% e il ${tMax}%: è l'intervallo indicato come sano nei contact center. Sopra il ${tMax}% non resta margine per i picchi di richieste.`],
     ["Chat in carico", `Una chat è in carico a un operatore dalla sua prima all'ultima risposta, per un massimo di ${capSess} minuti. Le chat contemporanee sono quelle in carico alla stessa persona nello stesso momento; il team ne prevede al massimo ${maxChat}.`],
     ["Lavoro attivo in chat", `Dietro ogni risposta si contano i secondi trascorsi dal messaggio precedente, fino a un massimo di ${capResp} secondi. Le attese del cliente non sono lavoro e non vengono contate.`],
     ["Ticket, mail e WhatsApp", "Ogni risposta inviata da un operatore vale un tempo standard (vedi tabella sotto), collocato subito prima dell'orario di invio. Sono stime iniziali, da validare con un campionamento sul team."],
+    ["Chiamate", "Si usa la durata reale registrata dal centralino in Zoho CRM, senza stime. Contano solo le chiamate con risposta fatte o ricevute dagli interni del team; quelle gestite dal receptionist digitale e quelle senza risposta no. Dati disponibili dal 15/09/2026."],
     ["Formazione", "Si usa la durata registrata dagli operatori nella sezione Formazione, senza stime."],
     ["Persone necessarie", `Ore occupate dal team in un giorno ÷ (${fmt(disp, 1)} ore disponibili × ${tMax}%). Indica quante persone a tempo pieno servono per restare entro il limite superiore della fascia sostenibile.`],
   ];

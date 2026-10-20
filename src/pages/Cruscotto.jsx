@@ -12,9 +12,10 @@ import {
 } from "lucide-react";
 import KPICard from "../components/KPICard";
 import Loading from "../components/Loading";
+import CruscottoBlocchi from "../components/CruscottoBlocchi";
 import { formatNumber, formatSeconds, formatMinutes } from "../lib/format";
 
-export default function Cruscotto({ data }) {
+export default function Cruscotto({ data, period, prevPeriod, onNavigate }) {
   const safeData = data || {};
   const loading = safeData.loading;
   const error = safeData.error;
@@ -170,6 +171,11 @@ export default function Cruscotto({ data }) {
           />
         </div>
       </section>
+
+      {/* Sezioni nate dopo: chiamate, mail e WhatsApp, carico di lavoro, qualità chat */}
+      {period && prevPeriod && (
+        <CruscottoBlocchi period={period} prevPeriod={prevPeriod} data={safeData} onNavigate={onNavigate} />
+      )}
 
       {/* Sezione: Top operatori chat */}
       {chatOps.length > 0 && (

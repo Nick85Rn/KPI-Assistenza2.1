@@ -60,7 +60,7 @@ select cron.schedule('geocode-locali-every-5min', '*/5 * * * *', $$
     timeout_milliseconds := 120000
   ) as request_id $$);
 
--- Sincronizzazioni giornaliere KPI (05:10-05:48 UTC), in sequenza
+-- Sincronizzazioni giornaliere KPI (05:10-05:50 UTC), in sequenza
 select cron.schedule('kpi-sync-desk-daily', '10 5 * * *', $$
   select net.http_get(
     url := 'https://oqqqoedxzflnebjozhqu.supabase.co/functions/v1/zoho-sync-desk',
@@ -91,7 +91,8 @@ select cron.schedule('kpi-sync-contacts-daily', '18 5 * * *', $$
 
 -- Chiamate del centralino 3CX registrate in Zoho CRM (ultimi 14 giorni): scheda "Chiamate".
 -- Tabelle e vista in supabase/calls-setup.sql. Recupero storico: ?since=YYYY-MM-DD.
-select cron.schedule('kpi-sync-calls-daily', '48 5 * * *', $$
+-- Deve girare PRIMA del ricalcolo del carico di lavoro (05:40), che usa le chiamate.
+select cron.schedule('kpi-sync-calls-daily', '36 5 * * *', $$
   select net.http_get(
     url := 'https://oqqqoedxzflnebjozhqu.supabase.co/functions/v1/zoho-sync-calls',
     headers := jsonb_build_object('x-cron-secret',
