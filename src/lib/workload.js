@@ -69,6 +69,7 @@ export function summarize(daily, S) {
     ticket: Math.max(0, oreTicketTutte - oreSviluppo),
     sviluppo: oreSviluppo,
     formazione: sumBy(rows, "ore_formazione"),
+    chiamate: sumBy(rows, "ore_chiamate"),
   };
   const conteggi = {
     chat: chatGestite,
@@ -79,6 +80,7 @@ export function summarize(daily, S) {
     sviluppo: rispSvil,
     aperture,
     formazione: sumBy(rows, "sessioni_formazione"),
+    chiamate: sumBy(rows, "chiamate_gestite"),
   };
 
   // Per operatore
@@ -86,7 +88,7 @@ export function summarize(daily, S) {
   for (const r of rows) {
     const o = perOp.get(r.operatore) ?? {
       operatore: r.operatore, giorni: 0, oreOccupate: 0,
-      chat: 0, ticket: 0, sviluppo: 0, formazione: 0, minOltre: 0, picco: 0, chatGestite: 0,
+      chat: 0, ticket: 0, sviluppo: 0, formazione: 0, chiamate: 0, minOltre: 0, picco: 0, chatGestite: 0,
     };
     o.giorni += 1;
     o.oreOccupate += num(r.ore_occupate);
@@ -95,6 +97,7 @@ export function summarize(daily, S) {
     o.sviluppo += svil;
     o.ticket += Math.max(0, num(r.ore_ticket_stimate) - svil);
     o.formazione += num(r.ore_formazione);
+    o.chiamate += num(r.ore_chiamate);
     o.minOltre += num(r.min_oltre_max_chat);
     o.picco = Math.max(o.picco, num(r.picco_chat));
     o.chatGestite += num(r.chat_gestite);

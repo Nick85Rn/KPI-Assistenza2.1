@@ -186,7 +186,7 @@ export default function DepartmentTickets({
 }
 
 // Toglie le mail automatiche dai KPI aggregati (arrivano già sommati).
-function withoutAutomatic(k) {
+export function withoutAutomatic(k) {
   const a = k.automatic;
   const byStatus = k.byStatus
     .map((s) => ({ ...s, tickets: Math.max(0, s.tickets - (a.byStatus[s.status] || 0)) }))

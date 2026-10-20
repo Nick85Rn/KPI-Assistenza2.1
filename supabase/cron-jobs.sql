@@ -22,7 +22,7 @@ select cron.unschedule(jobname)
 from cron.job
 where jobname in (
   'geocode-locali-every-5min', 'kpi-sync-contacts-daily', 'kpi-sync-crm-daily',
-  'kpi-sync-desk-daily', 'kpi-sync-desk-sla-daily', 'kpi-sync-open-tickets-daily',
+  'kpi-sync-calls-daily', 'kpi-sync-desk-daily', 'kpi-sync-desk-sla-daily', 'kpi-sync-open-tickets-daily',
   'kpi-sync-salesiq-daily', 'mail-automatiche-refresh-daily', 'score-chats-daily',
   'zoho-resolve-addresses-weekly', 'zoho-sync-desk-threads-daily', 'zoho-sync-locali-daily',
   'zoho-sync-locali-weekly-full', 'zoho-workload-recompute-daily'
@@ -60,7 +60,7 @@ select cron.schedule('geocode-locali-every-5min', '*/5 * * * *', $$
     timeout_milliseconds := 120000
   ) as request_id $$);
 
--- Sincronizzazioni giornaliere KPI (05:10-05:44 UTC), in sequenza
+-- Sincronizzazioni giornaliere KPI (05:10-05:50 UTC), in sequenza
 select cron.schedule('kpi-sync-desk-daily', '10 5 * * *', $$
   select net.http_get(
     url := 'https://oqqqoedxzflnebjozhqu.supabase.co/functions/v1/zoho-sync-desk',
@@ -85,6 +85,16 @@ select cron.schedule('kpi-sync-crm-daily', '16 5 * * *', $$
 select cron.schedule('kpi-sync-contacts-daily', '18 5 * * *', $$
   select net.http_get(
     url := 'https://oqqqoedxzflnebjozhqu.supabase.co/functions/v1/zoho-sync-contacts',
+    headers := jsonb_build_object('x-cron-secret',
+      (select decrypted_secret from vault.decrypted_secrets where name='CRON_SECRET')),
+    timeout_milliseconds := 150000) $$);
+
+-- Chiamate del centralino 3CX registrate in Zoho CRM (ultimi 14 giorni): scheda "Chiamate".
+-- Tabelle e vista in supabase/calls-setup.sql. Recupero storico: ?since=YYYY-MM-DD.
+-- Deve girare PRIMA del ricalcolo del carico di lavoro (05:40), che usa le chiamate.
+select cron.schedule('kpi-sync-calls-daily', '36 5 * * *', $$
+  select net.http_get(
+    url := 'https://oqqqoedxzflnebjozhqu.supabase.co/functions/v1/zoho-sync-calls',
     headers := jsonb_build_object('x-cron-secret',
       (select decrypted_secret from vault.decrypted_secrets where name='CRON_SECRET')),
     timeout_milliseconds := 150000) $$);

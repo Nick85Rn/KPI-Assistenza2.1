@@ -28,6 +28,8 @@ import { percentChange, formatPercent } from "../lib/format";
  * @param suffix      string                — suffisso opzionale (es. "min", "h")
  * @param hint        string                — sottotitolo opzionale
  * @param onClick     function              — se passato, la card è cliccabile (futuro drill-down)
+ * @param showYoy     boolean               — false nasconde il confronto con l'anno scorso
+ *                                            (per dati che non hanno ancora uno storico di un anno)
  */
 export default function KPICard({
   label,
@@ -40,6 +42,7 @@ export default function KPICard({
   suffix,
   hint,
   onClick,
+  showYoy = true,
 }) {
   const hasValue = value != null && !isNaN(value);
   const valueDisplay = hasValue ? formatter(value) : "—";
@@ -85,7 +88,7 @@ export default function KPICard({
       {/* Confronti */}
       <div className="space-y-1 pt-3 border-t border-slate-100">
         <DeltaRow label="vs periodo precedente" delta={deltaPrev} intent={intent} />
-        <DeltaRow label="vs anno scorso"        delta={deltaYoy}  intent={intent} />
+        {showYoy && <DeltaRow label="vs anno scorso" delta={deltaYoy} intent={intent} />}
       </div>
     </div>
   );

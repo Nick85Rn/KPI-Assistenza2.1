@@ -18,6 +18,7 @@ import ChatbotFaq from "./pages/ChatbotFaq";
 import AnalisiChat from "./pages/AnalisiChat";
 import CaricoLavoro from "./pages/CaricoLavoro";
 import QualitaChat from "./pages/QualitaChat";
+import Chiamate from "./pages/Chiamate";
 import Report from "./pages/Report";
 import MappaLocali from "./pages/MappaLocali";
 import Impostazioni from "./pages/Impostazioni";
@@ -104,7 +105,7 @@ function AppInner({ session }) {
   const lastSync = data.lastSync && typeof data.lastSync === "object" ? data.lastSync : {};
   const hasSyncInfo = Object.keys(lastSync).length > 0;
 
-  const showOverlay = !!data.loading && !!data.current && activePage !== "report" && activePage !== "carico-lavoro" && activePage !== "impostazioni";
+  const showOverlay = !!data.loading && !!data.current && activePage !== "report" && activePage !== "carico-lavoro" && activePage !== "chiamate" && activePage !== "impostazioni";
   const overlayLabel = sync.running
     ? "Sincronizzazione con Zoho in corso..."
     : "Aggiornamento dati...";
@@ -160,7 +161,9 @@ function AppInner({ session }) {
               activePage={activePage}
               data={data}
               period={{ start: ranges.start, end: ranges.end, from: toIso(ranges.start), to: toIso(ranges.end) }}
+              prevPeriod={{ start: ranges.prevStart, end: ranges.prevEnd, from: toIso(ranges.prevStart), to: toIso(ranges.prevEnd) }}
               periodType={period.type}
+              onNavigate={setActivePage}
             />
           </ErrorBoundary>
         </div>
@@ -171,7 +174,7 @@ function AppInner({ session }) {
   );
 }
 
-function PageContent({ activePage, data, period, periodType }) {
+function PageContent({ activePage, data, period, prevPeriod, periodType, onNavigate }) {
   if (activePage === "report") {
     return <Report period={period} periodType={periodType} />;
   }
@@ -184,6 +187,9 @@ function PageContent({ activePage, data, period, periodType }) {
   if (activePage === "carico-lavoro") {
     return <CaricoLavoro period={period} />;
   }
+  if (activePage === "chiamate") {
+    return <Chiamate period={period} />;
+  }
   if (activePage === "qualita-chat") {
     return <QualitaChat period={period} />;
   }
@@ -194,7 +200,7 @@ function PageContent({ activePage, data, period, periodType }) {
     return <Loading size="lg" label="Caricamento dati Zoho..." />;
   }
   switch (activePage) {
-    case "cruscotto":     return <Cruscotto data={data} />;
+    case "cruscotto":     return <Cruscotto data={data} period={period} prevPeriod={prevPeriod} onNavigate={onNavigate} />;
     case "chat":          return <RepartoChat data={data} />;
     case "formazione":    return <Formazione data={data} />;
     case "assistenza":    return <Assistenza data={data} />;
