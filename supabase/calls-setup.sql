@@ -66,6 +66,7 @@ insert into public.call_extensions (extension, name, perimetro) values
   ('248', 'Digital Specialist', 'Altro reparto'),
   ('249', 'Giulia Di Chicco', 'Altro reparto'),
   ('250', 'Giulia Dini', 'Altro reparto'),
+  ('251', 'Marica Perri', 'Altro reparto'),
   ('252', 'Flavia Pupillo', 'Altro reparto'),
   ('253', 'Luna Mercatali', 'Altro reparto'),
   ('254', 'Leandro Salfo', 'Assistenza'),
@@ -74,7 +75,12 @@ insert into public.call_extensions (extension, name, perimetro) values
   ('801', 'Receptionist digitale – Closed (fuori orario)', 'Receptionist digitale'),
   ('802', 'Receptionist digitale – Agent Busy (agenti occupati)', 'Receptionist digitale'),
   ('803', 'Coda Commerciale', 'Commerciale'),
-  ('804', 'Coda Amministrazione', 'Altro reparto')
+  ('804', 'Coda Amministrazione', 'Altro reparto'),
+  ('805', 'Receptionist digitale – Messaggio automatico 805', 'Receptionist digitale'),
+  ('806', 'Receptionist digitale – Messaggio automatico 806', 'Receptionist digitale'),
+  ('807', 'Receptionist digitale – Messaggio automatico 807', 'Receptionist digitale'),
+  ('808', 'Receptionist digitale – Messaggio automatico 808', 'Receptionist digitale'),
+  ('809', 'Receptionist digitale – Messaggio automatico 809', 'Receptionist digitale')
 on conflict (extension) do update
   set name = excluded.name, perimetro = excluded.perimetro, updated_at = now();
 
